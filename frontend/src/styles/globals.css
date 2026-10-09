@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  body {
+    @apply bg-paper font-sans text-ink antialiased;
+    /* faint paper grain */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.23 0 0 0 0 0.25 0 0 0 0 0.29 0 0 0 .035 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  ::selection {
+    @apply bg-sand text-ink;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-fade-in {
+    animation: none !important;
+  }
+}
+
+@layer components {
+  /* Wide-tracked uppercase label, as in "C O L O R   P A L E T T E" */
+  .eyebrow {
+    @apply font-sans text-[11px] font-medium uppercase tracking-[0.28em] text-stone;
+  }
+  .card {
+    @apply rounded-[22px] border border-slate/[0.07] bg-linen shadow-soft;
+  }
+  .pill {
+    @apply rounded-full border px-4 py-1.5 text-sm transition disabled:cursor-not-allowed disabled:opacity-40;
+  }
+}
