@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useWorkoutState } from "@/hooks/useWorkoutState";
 import type { Exercise } from "@/types";
-import { STATUS_COLORS, STATUS_LABEL, titleCase } from "@/utils/formatters";
+import { STATUS_COLORS, STATUS_LABEL } from "@/utils/formatters";
 
 export default function CurrentIssueCard({ exercise }: { exercise: Exercise }) {
   const issue = useWorkoutState((s) => s.issue);
@@ -13,7 +13,7 @@ export default function CurrentIssueCard({ exercise }: { exercise: Exercise }) {
       <AnimatePresence mode="wait">
         {issue ? (
           <motion.div
-            key={issue.joint}
+            key={issue.id}
             initial={{ x: 40, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.2 } }}
@@ -23,7 +23,8 @@ export default function CurrentIssueCard({ exercise }: { exercise: Exercise }) {
             <span className="w-0.5 shrink-0 rounded-full" style={{ backgroundColor: STATUS_COLORS[issue.status] }} />
             <div>
               <p className="eyebrow !tracking-[0.18em]" style={{ color: STATUS_COLORS[issue.status] }}>
-                {STATUS_LABEL[issue.status]} · {titleCase(issue.joint)}
+                {issue.label}
+                <span className="text-stone"> · {issue.id === "setup" ? "Setup" : issue.fromRep ? "Last rep" : STATUS_LABEL[issue.status]}</span>
               </p>
               <p className="mt-2 font-display text-2xl leading-snug text-slate">{issue.message}</p>
             </div>

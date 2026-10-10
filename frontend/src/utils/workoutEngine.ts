@@ -1,70 +1,122 @@
 import type {
   Exercise,
+  FaultHit,
+  FaultRule,
   FormIssue,
-  FrameEvaluation,
   JointAngles,
-  JointCheck,
   JointStatus,
   RepEvent,
   RepPhase,
   ScoreBreakdown,
+  Side,
 } from "@/types";
 import type { Landmark } from "@/types/mediapipe";
-import { computeJointAngles, evaluateFrame, issueMessage, JOINT_TRIPLETS } from "./poseValidation";
+import {
+  computeJointAngles,
+  computeMetrics,
+  evaluateRule,
+  faultMessage,
+  METRIC_REGION,
+  metricLandmarks,
+  metricValues,
+  PENALTY,
+  setupSatisfied,
+  sideVisibility,
+  type BodyRegion,
+  type FrameMetrics,
+  type MetricValue,
+} from "./poseValidation";
 import { RepCounter } from "./repCounter";
 
 /** Weight of the newest sample in the exponential moving averages. */
 const LANDMARK_SMOOTHING = 0.6;
-const ANGLE_SMOOTHING = 0.5;
+const METRIC_SMOOTHING = 0.5;
 const SCORE_SMOOTHING = 0.15;
-/** An issue must persist this long before it's shown (avoids flicker)… */
-const ISSUE_SHOW_MS = 300;
-/** …and form must stay clean this long before it's cleared. */
-const ISSUE_CLEAR_MS = 600;
+/** A live fault must persist this long before it's shown or coached (avoids flicker)… */
+const FAULT_CONFIRM_MS = 400;
+/** …and be gone this long before it's cleared. */
+const FAULT_CLEAR_MS = 700;
+/** The starting-position hint waits a little so it doesn't flash while people get set. */
+const SETUP_CONFIRM_MS = 1200;
+/** Rep faults stay on screen until the next rep, or this long. */
+const REP_ISSUE_MS = 5000;
+/** How long rep-fault joints stay highlighted after the rep. */
+const REP_HIGHLIGHT_MS = 1500;
+/** Switch the tracked side (side view) only when the other side is clearly more visible. */
+const SIDE_SWITCH_MARGIN = 0.08;
+/** Praise every Nth consecutive clean rep. */
+const PRAISE_EVERY = 3;
 
 export interface EngineSnapshot {
   landmarks: Landmark[] | null;
   /** Landmark index → status, for colouring the skeleton. */
   jointStatus: Map<number, JointStatus>;
   angles: JointAngles;
-  evaluation: FrameEvaluation | null;
-  /** Rep-driving joints are visible, so tracking is meaningful. */
+  /** The rep metric is measurable, so tracking is meaningful. */
   inFrame: boolean;
+  setupOk: boolean;
   score: number | null;
   breakdown: ScoreBreakdown;
   averageScore: number | null;
   reps: number;
   phase: RepPhase;
   repEvent: RepEvent | null;
+  /** The cue currently shown to the user. */
   issue: FormIssue | null;
+  /** Set on the frame a cue becomes worth speaking (new live fault, faulty rep, setup hint). */
+  coachIssue: FormIssue | null;
+  /** Set on the frame a run of clean reps deserves encouragement. */
+  praise: boolean;
 }
 
 const ema = (prev: number | undefined, next: number, alpha: number) =>
   prev === undefined ? next : prev + alpha * (next - prev);
 
+const severityRank = (s: JointStatus) => (s === "bad" ? 2 : s === "warn" ? 1 : 0);
+
 export class WorkoutEngine {
   private readonly counter: RepCounter;
+  private readonly liveRules: FaultRule[];
+  private readonly repRules: FaultRule[];
+  private readonly regions: Set<BodyRegion>;
+
   private smoothed: Landmark[] | null = null;
   private smoothedAngles: JointAngles = {};
+  private smoothedMetrics = new Map<string, number>();
+  private side: Side = "left";
+
   private score: number | null = null;
   private breakdown: ScoreBreakdown = { upper: null, core: null, lower: null, rom: null };
   private scoreSum = 0;
   private scoreFrames = 0;
+  private lastRepQuality: number | null = null;
 
-  private issue: FormIssue | null = null;
-  private pending: { check: JointCheck; since: number } | null = null;
-  private cleanSince: number | null = null;
+  /** Per-rep min/max of each rep-rule metric, keyed `${metric}:${side}`. */
+  private repAgg = new Map<string, { min: number; max: number; side: Side | null }>();
+  private repHits: FaultHit[] = [];
+  private repHitsAt = -Infinity;
+  private cleanStreak = 0;
+
+  private liveSince = new Map<string, number>();
+  private liveLast = new Map<string, { hit: FaultHit; at: number }>();
+  private setupFailSince: number | null = null;
+  private lastIssueKey: string | null = null;
 
   constructor(private readonly exercise: Exercise) {
     this.counter = new RepCounter(exercise.rep);
+    this.liveRules = exercise.faults.filter((f) => f.when !== "rep");
+    this.repRules = exercise.faults.filter((f) => f.when === "rep");
+    this.regions = new Set(exercise.faults.map((f) => METRIC_REGION[f.metric]));
   }
 
   process(raw: Landmark[] | null, width: number, height: number, now: number): EngineSnapshot {
     if (!raw) {
       this.smoothed = null;
-      return this.snapshot(null, {}, null, false, null);
+      this.setupFailSince = null;
+      return this.snapshot({ landmarks: null, angles: {}, inFrame: false, setupOk: true, jointStatus: new Map() });
     }
 
+    // 1. Smooth landmarks and angles.
     this.smoothed = raw.map((p, i) => {
       const prev = this.smoothed?.[i];
       return prev
@@ -76,82 +128,233 @@ export class WorkoutEngine {
           }
         : p;
     });
-
-    const angles = computeJointAngles(this.smoothed, width, height);
+    const lm = this.smoothed;
+    const angles = computeJointAngles(lm, width, height);
     for (const [joint, angle] of Object.entries(angles) as [keyof JointAngles, number][]) {
-      this.smoothedAngles[joint] = ema(this.smoothedAngles[joint], angle, ANGLE_SMOOTHING);
-      angles[joint] = this.smoothedAngles[joint];
+      angles[joint] = this.smoothedAngles[joint] = ema(this.smoothedAngles[joint], angle, METRIC_SMOOTHING);
     }
 
-    const repAngles = this.exercise.rep.joints.map((j) => angles[j]).filter((a): a is number => a !== undefined);
-    const inFrame = repAngles.length > 0;
+    // 2. Decide which side(s) to judge. In side view the far limbs are guessed by the model, so ignore them.
+    const sides = this.pickSides(lm);
+    const metrics = this.smoothMetrics(computeMetrics(lm, width, height, angles, sides));
+    const setupOk = setupSatisfied(this.exercise.setup, metrics);
+
+    // 3. Reps (only once the starting position is held).
+    const repValues = metricValues(metrics, this.exercise.rep.metric);
+    const inFrame = repValues.length > 0;
     let repEvent: RepEvent | null = null;
-    if (inFrame) {
-      repEvent = this.counter.update(repAngles.reduce((s, a) => s + a, 0) / repAngles.length, now);
-      if (repEvent) this.breakdown.rom = repEvent.rom;
+    if (inFrame && setupOk) {
+      const count = this.counter.update(repValues.reduce((s, v) => s + v.value, 0) / repValues.length, now);
+      if (this.counter.phase !== "start") this.aggregateRep(metrics);
+      if (count) {
+        repEvent = { ...count, faults: this.evaluateRep() };
+        this.onRep(repEvent, now);
+      } else if (this.counter.phase === "start") {
+        this.repAgg.clear();
+      }
+    } else {
+      this.repAgg.clear();
     }
 
-    const evaluation = evaluateFrame(angles, this.exercise, this.counter.phase);
-    if (evaluation.score !== null) {
-      this.score = this.score === null ? evaluation.score : ema(this.score, evaluation.score, SCORE_SMOOTHING);
-      this.scoreSum += evaluation.score;
-      this.scoreFrames += 1;
-      for (const part of ["upper", "core", "lower"] as const) {
-        const v = evaluation.breakdown[part];
-        if (v !== null) this.breakdown[part] = ema(this.breakdown[part] ?? undefined, v, SCORE_SMOOTHING);
+    // 4. Live posture faults.
+    const phase = this.counter.phase;
+    const liveHits: FaultHit[] = [];
+    if (inFrame && setupOk) {
+      for (const rule of this.liveRules) {
+        if (rule.when === "active" && phase === "start") continue;
+        if (rule.when === "peak" && phase !== "peak") continue;
+        const hit = evaluateRule(rule, metricValues(metrics, rule.metric));
+        if (hit) liveHits.push(hit);
       }
     }
-    this.updateIssue(evaluation.worst, now);
+    const confirmedLive = this.trackLive(liveHits, now);
 
-    return this.snapshot(this.smoothed, angles, evaluation, inFrame, repEvent);
+    // 5. Score.
+    if (inFrame && setupOk) {
+      const posture = Math.max(0, 100 - liveHits.reduce((s, h) => s + PENALTY[h.status], 0));
+      const frameScore = this.lastRepQuality === null ? posture : (posture + this.lastRepQuality) / 2;
+      this.score = ema(this.score ?? undefined, frameScore, SCORE_SMOOTHING);
+      this.scoreSum += frameScore;
+      this.scoreFrames += 1;
+      const repHits = now - this.repHitsAt < REP_ISSUE_MS ? this.repHits : [];
+      for (const region of ["upper", "core", "lower"] as const) {
+        if (!this.regions.has(region)) continue;
+        const penalty = [...liveHits, ...repHits]
+          .filter((h) => METRIC_REGION[h.rule.metric] === region)
+          .reduce((s, h) => s + PENALTY[h.status], 0);
+        this.breakdown[region] = ema(this.breakdown[region] ?? undefined, Math.max(0, 100 - penalty), SCORE_SMOOTHING);
+      }
+    }
+
+    // 6. Pick the cue to show, and whether it's new enough to speak.
+    const issue = this.chooseIssue(confirmedLive, setupOk, inFrame, now);
+    let coachIssue: FormIssue | null = null;
+    const key = issue ? `${issue.id}:${issue.fromRep ? this.counter.reps + this.repHitsAt : "live"}` : null;
+    if (issue && key !== this.lastIssueKey) coachIssue = issue;
+    this.lastIssueKey = key;
+
+    const praise =
+      !!repEvent && repEvent.type === "rep" && repEvent.faults.length === 0 && this.cleanStreak % PRAISE_EVERY === 0;
+
+    return this.snapshot({
+      landmarks: lm,
+      angles,
+      inFrame,
+      setupOk,
+      jointStatus: this.jointStatus(sides, liveHits, now),
+      repEvent,
+      issue,
+      coachIssue,
+      praise,
+    });
   }
 
-  private updateIssue(worst: JointCheck | null, now: number) {
-    if (!worst) {
-      this.pending = null;
-      this.cleanSince ??= now;
-      if (this.issue && now - this.cleanSince >= ISSUE_CLEAR_MS) this.issue = null;
-      return;
-    }
-    this.cleanSince = null;
+  private pickSides(lm: Landmark[]): Side[] {
+    if (this.exercise.view === "front") return ["left", "right"];
+    const l = sideVisibility(lm, "left");
+    const r = sideVisibility(lm, "right");
+    if (this.side === "left" && r > l + SIDE_SWITCH_MARGIN) this.side = "right";
+    else if (this.side === "right" && l > r + SIDE_SWITCH_MARGIN) this.side = "left";
+    return [this.side];
+  }
 
-    if (this.issue?.joint === worst.joint) {
-      // Same issue still present: keep message/status fresh.
-      this.issue = { joint: worst.joint, status: worst.status, message: issueMessage(worst, this.exercise) };
-      return;
+  private smoothMetrics(m: FrameMetrics): FrameMetrics {
+    for (const [metric, bySide] of Object.entries(m.sided)) {
+      for (const [side, v] of Object.entries(bySide) as [Side, number][]) {
+        const key = `${metric}:${side}`;
+        const s = ema(this.smoothedMetrics.get(key), v, METRIC_SMOOTHING);
+        this.smoothedMetrics.set(key, s);
+        bySide[side] = s;
+      }
     }
-    if (this.pending?.check.joint !== worst.joint) {
-      this.pending = { check: worst, since: now };
-    } else if (now - this.pending.since >= ISSUE_SHOW_MS) {
-      this.issue = { joint: worst.joint, status: worst.status, message: issueMessage(worst, this.exercise) };
-      this.pending = null;
+    for (const [metric, v] of Object.entries(m.global) as [keyof FrameMetrics["global"], number][]) {
+      const s = ema(this.smoothedMetrics.get(metric), v, METRIC_SMOOTHING);
+      this.smoothedMetrics.set(metric, s);
+      m.global[metric] = s;
     }
+    return m;
+  }
+
+  private aggregateRep(m: FrameMetrics) {
+    for (const rule of this.repRules) {
+      for (const { side, value } of metricValues(m, rule.metric)) {
+        const key = `${rule.metric}:${side}`;
+        const agg = this.repAgg.get(key);
+        if (agg) {
+          agg.min = Math.min(agg.min, value);
+          agg.max = Math.max(agg.max, value);
+        } else {
+          this.repAgg.set(key, { min: value, max: value, side });
+        }
+      }
+    }
+  }
+
+  private evaluateRep(): FaultHit[] {
+    const hits: FaultHit[] = [];
+    for (const rule of this.repRules) {
+      const values: MetricValue[] = [];
+      for (const [key, agg] of this.repAgg) {
+        if (key.startsWith(`${rule.metric}:`)) values.push({ side: agg.side, value: rule.agg === "max" ? agg.max : agg.min });
+      }
+      const hit = evaluateRule(rule, values);
+      if (hit) hits.push(hit);
+    }
+    this.repAgg.clear();
+    return hits;
+  }
+
+  private onRep(event: RepEvent, now: number) {
+    this.breakdown.rom = event.rom;
+    this.repHits = event.faults;
+    this.repHitsAt = now;
+    this.lastRepQuality = Math.max(0, 100 - event.faults.reduce((s, h) => s + PENALTY[h.status], 0));
+    const clean = event.type === "rep" && event.faults.length === 0 && this.liveLast.size === 0;
+    this.cleanStreak = clean ? this.cleanStreak + 1 : 0;
+  }
+
+  /** Debounces live faults; returns those that have persisted long enough to act on. */
+  private trackLive(hits: FaultHit[], now: number): FaultHit[] {
+    for (const hit of hits) {
+      this.liveLast.set(hit.rule.id, { hit, at: now });
+      if (!this.liveSince.has(hit.rule.id)) this.liveSince.set(hit.rule.id, now);
+    }
+    for (const [id, last] of this.liveLast) {
+      if (now - last.at > FAULT_CLEAR_MS) {
+        this.liveLast.delete(id);
+        this.liveSince.delete(id);
+      }
+    }
+    return [...this.liveLast.entries()]
+      .filter(([id]) => now - (this.liveSince.get(id) ?? now) >= FAULT_CONFIRM_MS)
+      .map(([, last]) => last.hit);
+  }
+
+  private chooseIssue(live: FaultHit[], setupOk: boolean, inFrame: boolean, now: number): FormIssue | null {
+    const setup = this.exercise.setup;
+    if (setup && !setupOk && inFrame) {
+      this.setupFailSince ??= now;
+      if (now - this.setupFailSince >= SETUP_CONFIRM_MS) {
+        return { id: "setup", label: "Get into position", message: setup.cue, status: "warn", side: null, fromRep: false };
+      }
+      return null;
+    }
+    this.setupFailSince = null;
+
+    const repHits = now - this.repHitsAt < REP_ISSUE_MS ? this.repHits : [];
+    const order = (h: FaultHit) => this.exercise.faults.indexOf(h.rule);
+    const candidates = [
+      ...live.map((hit) => ({ hit, fromRep: false })),
+      ...repHits.map((hit) => ({ hit, fromRep: true })),
+    ].sort(
+      (a, b) =>
+        severityRank(b.hit.status) - severityRank(a.hit.status) ||
+        Number(a.fromRep) - Number(b.fromRep) || // live problems first: they're happening right now
+        order(a.hit) - order(b.hit),
+    );
+    const top = candidates[0];
+    if (!top) return null;
+    return {
+      id: top.hit.rule.id,
+      label: top.hit.rule.label,
+      message: faultMessage(top.hit, this.exercise),
+      status: top.hit.status,
+      side: top.hit.sides.length === 1 ? top.hit.sides[0] : null,
+      fromRep: top.fromRep,
+    };
+  }
+
+  private jointStatus(sides: Side[], liveHits: FaultHit[], now: number): Map<number, JointStatus> {
+    const status = new Map<number, JointStatus>();
+    const mark = (indices: number[], s: JointStatus) => {
+      for (const i of indices) {
+        if (severityRank(s) >= severityRank(status.get(i) ?? "good")) status.set(i, s);
+      }
+    };
+    for (const rule of this.exercise.faults) mark(metricLandmarks(rule.metric, sides), "good");
+    mark(metricLandmarks(this.exercise.rep.metric, sides), "good");
+    const recentRep = now - this.repHitsAt < REP_HIGHLIGHT_MS ? this.repHits : [];
+    for (const hit of [...liveHits, ...recentRep]) {
+      mark(metricLandmarks(hit.rule.metric, hit.sides.length ? hit.sides : sides), hit.status);
+    }
+    return status;
   }
 
   private snapshot(
-    landmarks: Landmark[] | null,
-    angles: JointAngles,
-    evaluation: FrameEvaluation | null,
-    inFrame: boolean,
-    repEvent: RepEvent | null,
+    s: Pick<EngineSnapshot, "landmarks" | "angles" | "inFrame" | "setupOk" | "jointStatus"> &
+      Partial<Pick<EngineSnapshot, "repEvent" | "issue" | "coachIssue" | "praise">>,
   ): EngineSnapshot {
-    const jointStatus = new Map<number, JointStatus>();
-    for (const check of evaluation?.checks ?? []) {
-      jointStatus.set(JOINT_TRIPLETS[check.joint][1], check.status);
-    }
     return {
-      landmarks,
-      jointStatus,
-      angles,
-      evaluation,
-      inFrame,
+      repEvent: null,
+      issue: null,
+      coachIssue: null,
+      praise: false,
+      ...s,
       score: this.score,
       breakdown: { ...this.breakdown },
       averageScore: this.scoreFrames ? this.scoreSum / this.scoreFrames : null,
       reps: this.counter.reps,
       phase: this.counter.phase,
-      repEvent,
-      issue: this.issue,
     };
   }
 }

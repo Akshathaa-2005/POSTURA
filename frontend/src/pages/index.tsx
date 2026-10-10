@@ -4,12 +4,12 @@ import PoseFigure from "@/components/PoseFigure";
 import { EXERCISES } from "@/utils/exercises";
 
 // 3×3 mosaic echoing the palette board: colour blocks interleaved with moving figures.
-const MOSAIC: ({ tone: string } | { tone: string; figure: string; color: string })[] = [
+const MOSAIC: ({ tone: string; brand?: boolean } | { tone: string; figure: string; color: string })[] = [
   { tone: "bg-mist" },
   { tone: "bg-linen", figure: "jumping_jack", color: "#4A4F5C" },
   { tone: "bg-sand" },
   { tone: "bg-[#ECE8E1]", figure: "lunge", color: "#8E7763" },
-  { tone: "bg-slate" },
+  { tone: "bg-cream", brand: true },
   { tone: "bg-[#DCE3E8]", figure: "squat", color: "#4A4F5C" },
   { tone: "bg-taupe" },
   { tone: "bg-linen", figure: "shoulder_press", color: "#5F829A" },
@@ -21,11 +21,11 @@ export default function Home() {
     <Layout>
       <section className="grid items-center gap-12 py-8 lg:grid-cols-[1.1fr_1fr] lg:py-14">
         <div className="animate-fade-up">
-          <p className="eyebrow">AI Form Coach&nbsp;&nbsp;—&nbsp;&nbsp;01</p>
+          <p className="eyebrow">Postura&nbsp;&nbsp;—&nbsp;&nbsp;AI form coach</p>
           <h1 className="mt-6 font-display text-6xl font-normal leading-[0.95] tracking-tight text-slate sm:text-7xl xl:text-8xl">
             Move with
             <br />
-            <em className="font-normal text-taupe">intention.</em>
+            <em className="font-normal text-forest">intention.</em>
           </h1>
           <p className="mt-8 max-w-md text-lg font-light leading-relaxed text-stone">
             A calm, attentive coach that watches your form in real time, gently guiding every joint into
@@ -34,7 +34,7 @@ export default function Home() {
           <div className="mt-10 flex flex-wrap items-center gap-6">
             <a
               href="#practice"
-              className="rounded-full bg-slate px-8 py-3.5 text-sm font-medium tracking-wide text-linen transition hover:bg-ink"
+              className="rounded-full bg-forest px-8 py-3.5 text-sm font-medium tracking-wide text-cream transition hover:bg-[#173a24]"
             >
               Begin your practice
             </a>
@@ -49,6 +49,10 @@ export default function Home() {
               style={{ animationDelay: `${150 + i * 60}ms` }}
               className={`relative aspect-[3/4] animate-fade-in overflow-hidden ${tile.tone}`}
             >
+              {"brand" in tile && tile.brand && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src="/brand/postura-mark.png" alt="Postura" className="absolute inset-0 m-auto h-[78%] w-auto" />
+              )}
               {"figure" in tile && (
                 <PoseFigure
                   exerciseId={tile.figure}

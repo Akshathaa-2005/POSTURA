@@ -1,0 +1,105 @@
+{
+  "version": 4,
+  "routes": {
+    "/workout/jumping_jack": {
+      "initialRevalidateSeconds": false,
+      "srcRoute": "/workout/[id]",
+      "dataRoute": "/_next/data/eOpXbi1rSQcHs3pDZjfU8/workout/jumping_jack.json",
+      "allowHeader": [
+        "host",
+        "x-matched-path",
+        "x-prerender-revalidate",
+        "x-prerender-revalidate-if-generated",
+        "x-next-revalidated-tags",
+        "x-next-revalidate-tag-token"
+      ]
+    },
+    "/workout/squat": {
+      "initialRevalidateSeconds": false,
+      "srcRoute": "/workout/[id]",
+      "dataRoute": "/_next/data/eOpXbi1rSQcHs3pDZjfU8/workout/squat.json",
+      "allowHeader": [
+        "host",
+        "x-matched-path",
+        "x-prerender-revalidate",
+        "x-prerender-revalidate-if-generated",
+        "x-next-revalidated-tags",
+        "x-next-revalidate-tag-token"
+      ]
+    },
+    "/workout/push_up": {
+      "initialRevalidateSeconds": false,
+      "srcRoute": "/workout/[id]",
+      "dataRoute": "/_next/data/eOpXbi1rSQcHs3pDZjfU8/workout/push_up.json",
+      "allowHeader": [
+        "host",
+        "x-matched-path",
+        "x-prerender-revalidate",
+        "x-prerender-revalidate-if-generated",
+        "x-next-revalidated-tags",
+        "x-next-revalidate-tag-token"
+      ]
+    },
+    "/workout/lunge": {
+      "initialRevalidateSeconds": false,
+      "srcRoute": "/workout/[id]",
+      "dataRoute": "/_next/data/eOpXbi1rSQcHs3pDZjfU8/workout/lunge.json",
+      "allowHeader": [
+        "host",
+        "x-matched-path",
+        "x-prerender-revalidate",
+        "x-prerender-revalidate-if-generated",
+        "x-next-revalidated-tags",
+        "x-next-revalidate-tag-token"
+      ]
+    },
+    "/workout/bicep_curl": {
+      "initialRevalidateSeconds": false,
+      "srcRoute": "/workout/[id]",
+      "dataRoute": "/_next/data/eOpXbi1rSQcHs3pDZjfU8/workout/bicep_curl.json",
+      "allowHeader": [
+        "host",
+        "x-matched-path",
+        "x-prerender-revalidate",
+        "x-prerender-revalidate-if-generated",
+        "x-next-revalidated-tags",
+        "x-next-revalidate-tag-token"
+      ]
+    },
+    "/workout/shoulder_press": {
+      "initialRevalidateSeconds": false,
+      "srcRoute": "/workout/[id]",
+      "dataRoute": "/_next/data/eOpXbi1rSQcHs3pDZjfU8/workout/shoulder_press.json",
+      "allowHeader": [
+        "host",
+        "x-matched-path",
+        "x-prerender-revalidate",
+        "x-prerender-revalidate-if-generated",
+        "x-next-revalidated-tags",
+        "x-next-revalidate-tag-token"
+      ]
+    }
+  },
+  "dynamicRoutes": {
+    "/workout/[id]": {
+      "routeRegex": "^/workout/([^/]+?)(?:/)?$",
+      "dataRoute": "/_next/data/eOpXbi1rSQcHs3pDZjfU8/workout/[id].json",
+      "fallback": false,
+      "dataRouteRegex": "^/_next/data/eOpXbi1rSQcHs3pDZjfU8/workout/([^/]+?)\\.json$",
+      "allowHeader": [
+        "host",
+        "x-matched-path",
+        "x-prerender-revalidate",
+        "x-prerender-revalidate-if-generated",
+        "x-next-revalidated-tags",
+        "x-next-revalidate-tag-token"
+      ]
+    }
+  },
+  "notFoundRoutes": [],
+  "preview": {
+    "previewModeId": "d1030774e82948f573df69e2cc174678",
+    "previewModeSigningKey": "5d2eb560a32bc60bbfefb1382fe628214595f8ce1fe761270d2b56cdef443f08",
+    "previewModeEncryptionKey": "a8bf75100282f7303e103566d1ea0f5e830d27acc2f3d6cd16c2bd2f9ad56d66"
+  }
+}

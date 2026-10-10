@@ -1,6 +1,32 @@
 import { create } from "zustand";
-import type { DetectionStatus, FormIssue, RepEvent, RepPhase, ScoreBreakdown } from "@/types";
+import type { DetectionStatus, FormIssue, JointStatus, RepEvent, RepPhase, ScoreBreakdown } from "@/types";
 import type { EngineSnapshot } from "@/utils/workoutEngine";
+import type { ConnectionState } from "@/utils/websocket";
+
+export interface CoachCorrection {
+  id: number;
+  faultId: string;
+  label: string;
+  status: JointStatus;
+  text: string;
+  source: "llm" | "template" | "cache";
+  at: number;
+}
+
+export interface CoachVoice {
+  id: number;
+  url: string;
+  text: string;
+}
+
+export interface CoachState {
+  connection: ConnectionState;
+  sessionId: string | null;
+  llm: boolean;
+  tts: boolean;
+  correction: CoachCorrection | null;
+  voice: CoachVoice | null;
+}
 
 interface WorkoutState {
   exerciseId: string | null;
@@ -14,17 +40,29 @@ interface WorkoutState {
   breakdown: ScoreBreakdown;
   averageScore: number | null;
   reps: number;
+  partialReps: number;
   phase: RepPhase;
   issue: FormIssue | null;
   lastEvent: RepEvent | null;
   fps: number;
   /** Time spent actively tracking (excludes pauses). */
   activeMs: number;
+  coach: CoachState;
 
   reset: (exerciseId: string, repTarget: number) => void;
   setStatus: (status: DetectionStatus, error?: string | null) => void;
   applySnapshot: (s: EngineSnapshot, extra: { fps: number; dtMs: number; event: RepEvent | null }) => void;
+  setCoach: (patch: Partial<CoachState>) => void;
 }
+
+const initialCoach: CoachState = {
+  connection: "offline",
+  sessionId: null,
+  llm: false,
+  tts: false,
+  correction: null,
+  voice: null,
+};
 
 const initialMetrics = {
   personVisible: false,
@@ -33,6 +71,7 @@ const initialMetrics = {
   breakdown: { upper: null, core: null, lower: null, rom: null },
   averageScore: null,
   reps: 0,
+  partialReps: 0,
   phase: "start" as RepPhase,
   issue: null,
   lastEvent: null,
@@ -46,8 +85,18 @@ export const useWorkoutState = create<WorkoutState>((set) => ({
   status: "idle",
   error: null,
   ...initialMetrics,
+  coach: initialCoach,
 
-  reset: (exerciseId, repTarget) => set({ exerciseId, repTarget, ...initialMetrics }),
+  // Keeps the live connection, but clears the previous session's coaching.
+  reset: (exerciseId, repTarget) =>
+    set((state) => ({
+      exerciseId,
+      repTarget,
+      ...initialMetrics,
+      coach: { ...state.coach, sessionId: null, correction: null, voice: null },
+    })),
+
+  setCoach: (patch) => set((state) => ({ coach: { ...state.coach, ...patch } })),
 
   setStatus: (status, error = null) => set({ status, error }),
 
@@ -61,6 +110,7 @@ export const useWorkoutState = create<WorkoutState>((set) => ({
       reps: s.reps,
       phase: s.phase,
       issue: s.issue,
+      partialReps: state.partialReps + (event?.type === "partial" ? 1 : 0),
       lastEvent: event ?? state.lastEvent,
       fps,
       activeMs: state.activeMs + dtMs,

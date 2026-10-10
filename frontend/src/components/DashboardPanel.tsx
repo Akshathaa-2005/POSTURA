@@ -1,6 +1,7 @@
 import { useWorkoutState } from "@/hooks/useWorkoutState";
 import type { Exercise } from "@/types";
 import { formatDuration, formatPercent } from "@/utils/formatters";
+import AICoachOverlay from "./AICoachOverlay";
 import CurrentIssueCard from "./CurrentIssueCard";
 import FormScoreMeter from "./FormScoreMeter";
 import RepCounter from "./RepCounter";
@@ -15,6 +16,7 @@ export default function DashboardPanel({ exercise }: { exercise: Exercise }) {
       <FormScoreMeter />
       <RepCounter />
       <CurrentIssueCard exercise={exercise} />
+      <AICoachOverlay />
 
       <section className="grid grid-cols-3 divide-x divide-slate/10 overflow-hidden rounded-[22px] bg-sand/60">
         <Metric label="Time" value={formatDuration(activeMs / 1000)} />

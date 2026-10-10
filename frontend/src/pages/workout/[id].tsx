@@ -5,6 +5,7 @@ import DashboardPanel from "@/components/DashboardPanel";
 import Layout from "@/components/Layout";
 import VideoPoseContainer from "@/components/VideoPoseContainer";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { useWebSocket } from "@/hooks/useWebSocket";
 import { useWorkoutState } from "@/hooks/useWorkoutState";
 import type { Exercise } from "@/types";
 import { EXERCISES, getExercise } from "@/utils/exercises";
@@ -21,6 +22,8 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
   useEffect(() => {
     reset(exercise.id, exercise.rep_target);
   }, [exercise, sessionKey, reset]);
+
+  const { sendRep, sendIssue, sendPraise } = useWebSocket({ exerciseId: exercise.id, active: cameraOn, sessionKey });
 
   const start = () => {
     setPaused(false);
@@ -70,6 +73,9 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
           showAngles={showAngles}
           sessionKey={sessionKey}
           onStart={start}
+          onRepEvent={sendRep}
+          onCoachIssue={sendIssue}
+          onPraise={sendPraise}
         />
         <DashboardPanel exercise={exercise} />
       </div>

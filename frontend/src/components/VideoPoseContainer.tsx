@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import type { Exercise, RepEvent } from "@/types";
+import type { Exercise, FormIssue, RepEvent } from "@/types";
 import { usePoseDetection, type PoseResultsHandler } from "@/hooks/usePoseDetection";
 import { useWorkoutState } from "@/hooks/useWorkoutState";
 import { WorkoutEngine } from "@/utils/workoutEngine";
@@ -16,6 +16,11 @@ interface Props {
   /** Changing this restarts rep counting and scoring. */
   sessionKey: number;
   onStart: () => void;
+  onRepEvent?: (event: RepEvent, reps: number) => void;
+  /** A cue worth speaking aloud (new live fault, a faulty rep, or a setup hint). */
+  onCoachIssue?: (issue: FormIssue) => void;
+  /** A run of clean reps worth encouraging. */
+  onPraise?: () => void;
 }
 
 /** How often (ms) the React dashboard is refreshed; the canvas updates every frame regardless. */
@@ -29,7 +34,12 @@ export default function VideoPoseContainer({
   showAngles,
   sessionKey,
   onStart,
+  onRepEvent,
+  onCoachIssue,
+  onPraise,
 }: Props) {
+  const callbacks = useRef({ onRepEvent, onCoachIssue, onPraise });
+  callbacks.current = { onRepEvent, onCoachIssue, onPraise };
   const videoRef = useRef<HTMLVideoElement>(null);
   const [dims, setDims] = useState({ width: 0, height: 0 });
   const frameRef = useRef<SkeletonFrame>({ landmarks: null, jointStatus: new Map(), angles: {}, updatedAt: 0 });
@@ -56,7 +66,12 @@ export default function VideoPoseContainer({
         angles: snap.angles,
         updatedAt: now,
       };
-      if (snap.repEvent) pendingEvent.current = snap.repEvent;
+      if (snap.repEvent) {
+        pendingEvent.current = snap.repEvent;
+        callbacks.current.onRepEvent?.(snap.repEvent, snap.reps);
+      }
+      if (snap.coachIssue) callbacks.current.onCoachIssue?.(snap.coachIssue);
+      if (snap.praise) callbacks.current.onPraise?.();
 
       // Count active time only while frames are flowing (pauses are excluded).
       if (lastFrameAt.current !== null) unpushedMs.current += Math.min(250, now - lastFrameAt.current);
@@ -173,12 +188,21 @@ export default function VideoPoseContainer({
               className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2"
             >
               {lastEvent.type === "rep" ? (
-                <span className="flex h-20 w-20 items-center justify-center rounded-full bg-linen/90 font-display text-4xl text-done shadow-soft backdrop-blur">
-                  +1
+                <span className="flex flex-col items-center gap-2">
+                  <span className="flex h-20 w-20 items-center justify-center rounded-full bg-linen/90 font-display text-4xl text-done shadow-soft backdrop-blur">
+                    +1
+                  </span>
+                  <span
+                    className={`whitespace-nowrap rounded-full bg-linen/90 px-4 py-1 text-xs shadow-soft backdrop-blur ${
+                      lastEvent.faults.length ? "text-warn" : "text-done"
+                    }`}
+                  >
+                    {lastEvent.faults.length ? lastEvent.faults[0].rule.label : "Good rep"}
+                  </span>
                 </span>
               ) : (
                 <span className="whitespace-nowrap rounded-full bg-linen/90 px-5 py-2 text-sm text-warn shadow-soft backdrop-blur">
-                  Partial rep ({lastEvent.rom}%) · go through the full range
+                  Partial rep · {lastEvent.faults[0]?.rule.label ?? "go through the full range"}
                 </span>
               )}
             </motion.div>

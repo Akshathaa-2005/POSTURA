@@ -44,7 +44,7 @@ export default function ExerciseSelector({ exercises }: { exercises: Exercise[] 
                   <span className="h-1 w-1 rounded-full bg-taupe" />
                   <span className="eyebrow">{ex.category}</span>
                   <span className="h-1 w-1 rounded-full bg-taupe" />
-                  <span className="eyebrow">{/sideways/i.test(ex.camera_setup) ? "Side view" : "Front view"}</span>
+                  <span className="eyebrow">{ex.view === "side" ? "Side view" : "Front view"}</span>
                 </div>
               </div>
             </Link>

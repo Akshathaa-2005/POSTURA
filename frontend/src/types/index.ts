@@ -9,22 +9,52 @@ export type JointName =
   | "right_knee";
 
 export type JointType = "shoulder" | "elbow" | "hip" | "knee";
+export type Side = "left" | "right";
 
 /** Inclusive [min, max] range in degrees. */
 export type AngleRange = [number, number];
 
 export type JointAngles = Partial<Record<JointName, number>>;
-export type AngleTargets = Partial<Record<JointName, AngleRange>>;
+
+/**
+ * Measurements a fault or rep can be based on.
+ * Sided metrics are evaluated per body side (front view: both; side view: the side facing the camera).
+ */
+export type SidedMetric = JointType | "hands_overhead";
+export type GlobalMetric = "torso_lean" | "hip_sag" | "stance_width" | "knee_min";
+export type MetricName = SidedMetric | GlobalMetric;
 
 export interface RepConfig {
-  /** Joints whose (averaged) angle drives the rep. */
-  joints: JointName[];
-  /** Whether the angle increases or decreases on the way to the peak of a rep. */
+  metric: MetricName;
+  /** Whether the metric increases or decreases on the way to the peak of a rep. */
   direction: "increase" | "decrease";
-  /** Angle at which the body is considered back in the starting position. */
+  /** Value at which the body is considered back in the starting position. */
   start_threshold: number;
-  /** Angle that must be reached for the rep to count. */
+  /** Value that must be reached for the rep to count. */
   peak_threshold: number;
+}
+
+export interface FaultRule {
+  id: string;
+  label: string;
+  /** always: every frame · active: while moving/at the peak · peak: at the peak · rep: once per rep, on the rep's min/max */
+  when: "always" | "active" | "peak" | "rep";
+  metric: MetricName;
+  agg?: "min" | "max";
+  /** The fault is present when `metric op warn` holds; it is major when `metric op bad` also holds. */
+  op: "<" | ">";
+  warn: number;
+  bad?: number;
+  cue: string;
+  /** Used instead of `cue` when only one side is at fault (front view). `{side}` → left/right. */
+  cue_side?: string;
+}
+
+export interface SetupRule {
+  metric: MetricName;
+  op: "<" | ">";
+  value: number;
+  cue: string;
 }
 
 export interface Exercise {
@@ -36,13 +66,11 @@ export interface Exercise {
   rep_target: number;
   description: string;
   camera_setup: string;
-  /** Checked on every frame. */
-  ideal_angles: AngleTargets;
-  /** Checked only while the user is at the peak of a rep. */
-  peak_angles?: AngleTargets;
+  view: "front" | "side";
+  /** Starting position that must hold before reps and faults are evaluated. */
+  setup?: SetupRule;
   rep: RepConfig;
-  issue_messages?: Partial<Record<JointType, { low?: string; high?: string }>>;
-  common_issues: string[];
+  faults: FaultRule[];
   correction_tips: string[];
   voice_intro: string;
   voice_encouragement: string[];
@@ -50,16 +78,12 @@ export interface Exercise {
 
 export type JointStatus = "good" | "warn" | "bad";
 
-export interface JointCheck {
-  joint: JointName;
-  angle: number;
-  ideal: AngleRange;
-  /** Degrees outside the ideal range (0 when inside). */
-  deviation: number;
-  /** 0 (perfect) to 1 (30°+ off). */
-  severity: number;
-  status: JointStatus;
-  direction: "low" | "high" | null;
+export interface FaultHit {
+  rule: FaultRule;
+  status: Exclude<JointStatus, "good">;
+  /** Side(s) at fault, for sided metrics. */
+  sides: Side[];
+  value: number;
 }
 
 export interface ScoreBreakdown {
@@ -69,17 +93,15 @@ export interface ScoreBreakdown {
   rom: number | null;
 }
 
-export interface FrameEvaluation {
-  score: number | null;
-  checks: JointCheck[];
-  breakdown: Omit<ScoreBreakdown, "rom">;
-  worst: JointCheck | null;
-}
-
 export interface FormIssue {
-  joint: JointName;
+  /** Fault id, or "setup" when the user isn't in the starting position. */
+  id: string;
+  label: string;
   message: string;
-  status: JointStatus;
+  status: Exclude<JointStatus, "good">;
+  side: Side | null;
+  /** Detected from the last rep (depth/range) rather than live posture. */
+  fromRep: boolean;
 }
 
 export type RepPhase = "start" | "moving" | "peak";
@@ -89,6 +111,8 @@ export interface RepEvent {
   /** Range of motion achieved, 0-100. */
   rom: number;
   at: number;
+  /** Rep-level faults found in this rep (empty = a clean rep). */
+  faults: FaultHit[];
 }
 
 export type DetectionStatus =

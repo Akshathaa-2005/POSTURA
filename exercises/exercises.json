@@ -7,27 +7,30 @@
     "rep_target": 20,
     "description": "Full-body cardio exercise. Jump the feet out while sweeping the arms overhead, then return.",
     "camera_setup": "Face the camera, full body in frame",
-    "ideal_angles": {
-      "left_elbow": [140, 180],
-      "right_elbow": [140, 180],
-      "left_knee": [150, 180],
-      "right_knee": [150, 180]
-    },
-    "peak_angles": {
-      "left_shoulder": [150, 180],
-      "right_shoulder": [150, 180]
-    },
-    "rep": {
-      "joints": ["left_shoulder", "right_shoulder"],
-      "direction": "increase",
-      "start_threshold": 40,
-      "peak_threshold": 130
-    },
-    "issue_messages": {
-      "shoulder": { "low": "Sweep your {side} arm all the way overhead" },
-      "elbow": { "low": "Keep your {side} arm long and straight" }
-    },
-    "common_issues": ["arms_not_overhead", "bent_elbows", "knees_bent"],
+    "view": "front",
+    "rep": { "metric": "shoulder", "direction": "increase", "start_threshold": 40, "peak_threshold": 120 },
+    "faults": [
+      {
+        "id": "arms_not_overhead",
+        "label": "Arms not overhead",
+        "when": "rep", "metric": "hands_overhead", "agg": "max", "op": "<", "warn": 0, "bad": -0.4,
+        "cue": "Reach all the way up — bring your hands above your head",
+        "cue_side": "Your {side} arm isn't reaching overhead — swing it all the way up"
+      },
+      {
+        "id": "feet_narrow",
+        "label": "Feet too narrow",
+        "when": "rep", "metric": "stance_width", "agg": "max", "op": "<", "warn": 1.5, "bad": 1.15,
+        "cue": "Jump your feet wider — land just past shoulder width"
+      },
+      {
+        "id": "bent_arms",
+        "label": "Bent arms",
+        "when": "active", "metric": "elbow", "op": "<", "warn": 140, "bad": 110,
+        "cue": "Keep your arms long — straighten through the elbows",
+        "cue_side": "Straighten your {side} arm through the whole swing"
+      }
+    ],
     "correction_tips": [
       "Reach your arms fully overhead on every rep",
       "Keep your arms long, not bent",
@@ -35,7 +38,7 @@
       "Engage your core throughout"
     ],
     "voice_intro": "Let's do jumping jacks! Reach all the way overhead and land softly.",
-    "voice_encouragement": ["You're doing great!", "Keep up the pace!", "Nice form!"]
+    "voice_encouragement": ["You're doing great!", "Keep up the pace!", "Nice, full reach!"]
   },
   "squat": {
     "name": "Bodyweight Squat",
@@ -45,24 +48,22 @@
     "rep_target": 15,
     "description": "Sit the hips back and down until the thighs are about parallel, then drive back up.",
     "camera_setup": "Turn sideways to the camera, full body in frame",
-    "ideal_angles": {
-      "left_hip": [45, 180],
-      "right_hip": [45, 180]
-    },
-    "peak_angles": {
-      "left_hip": [55, 130],
-      "right_hip": [55, 130]
-    },
-    "rep": {
-      "joints": ["left_knee", "right_knee"],
-      "direction": "decrease",
-      "start_threshold": 160,
-      "peak_threshold": 100
-    },
-    "issue_messages": {
-      "hip": { "low": "Keep your chest up, you're folding forward", "high": "Sit your hips back a little more" }
-    },
-    "common_issues": ["not_deep_enough", "leaning_forward", "knees_caving"],
+    "view": "side",
+    "rep": { "metric": "knee", "direction": "decrease", "start_threshold": 160, "peak_threshold": 110 },
+    "faults": [
+      {
+        "id": "shallow_squat",
+        "label": "Not deep enough",
+        "when": "rep", "metric": "knee", "agg": "min", "op": ">", "warn": 100, "bad": 115,
+        "cue": "Sink a little deeper — aim for thighs parallel to the floor"
+      },
+      {
+        "id": "chest_forward",
+        "label": "Chest dropping",
+        "when": "active", "metric": "torso_lean", "op": ">", "warn": 45, "bad": 60,
+        "cue": "Lift your chest — keep your torso tall as you sit back"
+      }
+    ],
     "correction_tips": [
       "Push your hips back like sitting into a chair",
       "Keep your chest up and back flat",
@@ -70,7 +71,7 @@
       "Drive up through your heels"
     ],
     "voice_intro": "Time for squats. Sit back, chest up, and drive through your heels.",
-    "voice_encouragement": ["Strong rep!", "Great depth!", "Keep that chest up!"]
+    "voice_encouragement": ["Strong rep!", "Great depth!", "Lovely, chest up!"]
   },
   "push_up": {
     "name": "Push-Up",
@@ -80,28 +81,32 @@
     "rep_target": 12,
     "description": "Lower your chest toward the floor with a rigid plank body, then press back up.",
     "camera_setup": "Turn sideways to the camera, whole body visible",
-    "ideal_angles": {
-      "left_hip": [150, 180],
-      "right_hip": [150, 180],
-      "left_knee": [150, 180],
-      "right_knee": [150, 180]
+    "view": "side",
+    "setup": {
+      "metric": "torso_lean", "op": ">", "value": 55,
+      "cue": "Get into a high plank — hands under your shoulders, body in one line"
     },
-    "peak_angles": {
-      "left_elbow": [60, 100],
-      "right_elbow": [60, 100]
-    },
-    "rep": {
-      "joints": ["left_elbow", "right_elbow"],
-      "direction": "decrease",
-      "start_threshold": 150,
-      "peak_threshold": 100
-    },
-    "issue_messages": {
-      "hip": { "low": "Keep your body in one straight line from head to heels" },
-      "knee": { "low": "Lock out your {side} leg" },
-      "elbow": { "low": "Don't collapse at the bottom, stay controlled" }
-    },
-    "common_issues": ["hips_sagging", "hips_piking", "shallow_reps"],
+    "rep": { "metric": "elbow", "direction": "decrease", "start_threshold": 150, "peak_threshold": 110 },
+    "faults": [
+      {
+        "id": "hips_sagging",
+        "label": "Hips sagging",
+        "when": "always", "metric": "hip_sag", "op": ">", "warn": 7, "bad": 14,
+        "cue": "Lift your hips — squeeze your glutes and brace your core"
+      },
+      {
+        "id": "hips_piking",
+        "label": "Hips too high",
+        "when": "always", "metric": "hip_sag", "op": "<", "warn": -9, "bad": -16,
+        "cue": "Lower your hips into one straight line from head to heels"
+      },
+      {
+        "id": "shallow_push_up",
+        "label": "Shallow rep",
+        "when": "rep", "metric": "elbow", "agg": "min", "op": ">", "warn": 100, "bad": 115,
+        "cue": "Lower your chest further — bend your elbows to about 90°"
+      }
+    ],
     "correction_tips": [
       "Squeeze your glutes and brace your core",
       "Lower until your elbows reach about 90°",
@@ -119,21 +124,22 @@
     "rep_target": 12,
     "description": "Step forward and lower until both knees reach about 90°, then push back to standing.",
     "camera_setup": "Turn sideways to the camera, full body in frame",
-    "ideal_angles": {},
-    "peak_angles": {
-      "left_knee": [70, 110],
-      "right_knee": [70, 110]
-    },
-    "rep": {
-      "joints": ["left_knee", "right_knee"],
-      "direction": "decrease",
-      "start_threshold": 160,
-      "peak_threshold": 115
-    },
-    "issue_messages": {
-      "knee": { "low": "Don't sink too far on your {side} leg", "high": "Lower deeper on your {side} leg" }
-    },
-    "common_issues": ["not_deep_enough", "front_knee_past_toes", "torso_leaning"],
+    "view": "side",
+    "rep": { "metric": "knee_min", "direction": "decrease", "start_threshold": 160, "peak_threshold": 115 },
+    "faults": [
+      {
+        "id": "shallow_lunge",
+        "label": "Not deep enough",
+        "when": "rep", "metric": "knee_min", "agg": "min", "op": ">", "warn": 105, "bad": 120,
+        "cue": "Drop lower — let both knees bend to about 90°"
+      },
+      {
+        "id": "torso_lean",
+        "label": "Leaning forward",
+        "when": "active", "metric": "torso_lean", "op": ">", "warn": 20, "bad": 35,
+        "cue": "Stay tall — keep your chest up and torso upright"
+      }
+    ],
     "correction_tips": [
       "Take a long enough step forward",
       "Lower straight down, both knees near 90°",
@@ -141,7 +147,7 @@
       "Push back through your front heel"
     ],
     "voice_intro": "Let's lunge. Long step, drop straight down, and stay tall.",
-    "voice_encouragement": ["Nice and deep!", "Great balance!", "Stay tall!"]
+    "voice_encouragement": ["Nice and deep!", "Great balance!", "Beautifully tall!"]
   },
   "bicep_curl": {
     "name": "Bicep Curl",
@@ -150,26 +156,29 @@
     "duration_sec": 45,
     "rep_target": 15,
     "description": "Curl the hands toward the shoulders with the elbows pinned to your sides.",
-    "camera_setup": "Face the camera, upper body and hips in frame",
-    "ideal_angles": {
-      "left_shoulder": [0, 35],
-      "right_shoulder": [0, 35]
-    },
-    "peak_angles": {
-      "left_elbow": [20, 60],
-      "right_elbow": [20, 60]
-    },
-    "rep": {
-      "joints": ["left_elbow", "right_elbow"],
-      "direction": "decrease",
-      "start_threshold": 150,
-      "peak_threshold": 70
-    },
-    "issue_messages": {
-      "shoulder": { "high": "Keep your {side} elbow pinned to your side" },
-      "elbow": { "high": "Curl your {side} hand higher" }
-    },
-    "common_issues": ["elbows_drifting", "swinging", "partial_range"],
+    "camera_setup": "Turn sideways to the camera, upper body and hips in frame",
+    "view": "side",
+    "rep": { "metric": "elbow", "direction": "decrease", "start_threshold": 150, "peak_threshold": 75 },
+    "faults": [
+      {
+        "id": "elbow_drift",
+        "label": "Elbow drifting forward",
+        "when": "always", "metric": "shoulder", "op": ">", "warn": 25, "bad": 40,
+        "cue": "Pin your elbow to your side — only your forearm should move"
+      },
+      {
+        "id": "partial_curl",
+        "label": "Partial curl",
+        "when": "rep", "metric": "elbow", "agg": "min", "op": ">", "warn": 55, "bad": 70,
+        "cue": "Curl all the way up and squeeze at the top"
+      },
+      {
+        "id": "swinging",
+        "label": "Swinging",
+        "when": "active", "metric": "torso_lean", "op": ">", "warn": 10, "bad": 18,
+        "cue": "Stand tall and still — no swinging from the hips"
+      }
+    ],
     "correction_tips": [
       "Pin your elbows to your ribs",
       "Squeeze at the top of every curl",
@@ -177,7 +186,7 @@
       "No swinging from the hips"
     ],
     "voice_intro": "Bicep curls. Elbows pinned, full squeeze at the top.",
-    "voice_encouragement": ["Great squeeze!", "Nice and controlled!", "Keep those elbows tight!"]
+    "voice_encouragement": ["Great squeeze!", "Nice and controlled!", "Elbows tight, perfect!"]
   },
   "shoulder_press": {
     "name": "Shoulder Press",
@@ -186,25 +195,29 @@
     "duration_sec": 45,
     "rep_target": 12,
     "description": "Press the hands from shoulder height to straight overhead, then lower with control.",
-    "camera_setup": "Face the camera, upper body and hips in frame",
-    "ideal_angles": {},
-    "peak_angles": {
-      "left_elbow": [155, 180],
-      "right_elbow": [155, 180],
-      "left_shoulder": [150, 180],
-      "right_shoulder": [150, 180]
-    },
-    "rep": {
-      "joints": ["left_elbow", "right_elbow"],
-      "direction": "increase",
-      "start_threshold": 100,
-      "peak_threshold": 145
-    },
-    "issue_messages": {
-      "elbow": { "low": "Lock out your {side} arm fully overhead" },
-      "shoulder": { "low": "Press your {side} arm straight up, not forward" }
-    },
-    "common_issues": ["incomplete_lockout", "pressing_forward", "arching_back"],
+    "camera_setup": "Turn sideways to the camera, upper body and hips in frame",
+    "view": "side",
+    "rep": { "metric": "elbow", "direction": "increase", "start_threshold": 100, "peak_threshold": 150 },
+    "faults": [
+      {
+        "id": "no_lockout",
+        "label": "No lockout",
+        "when": "rep", "metric": "elbow", "agg": "max", "op": "<", "warn": 165, "bad": 150,
+        "cue": "Press all the way up — fully straighten your arms overhead"
+      },
+      {
+        "id": "pressing_forward",
+        "label": "Pressing forward",
+        "when": "rep", "metric": "shoulder", "agg": "max", "op": "<", "warn": 155, "bad": 140,
+        "cue": "Press straight up — finish with your arms by your ears"
+      },
+      {
+        "id": "leaning_back",
+        "label": "Leaning back",
+        "when": "active", "metric": "torso_lean", "op": ">", "warn": 10, "bad": 18,
+        "cue": "Brace your core and keep your ribs down — don't lean back"
+      }
+    ],
     "correction_tips": [
       "Press straight up, finishing with arms by your ears",
       "Fully extend at the top",
@@ -212,6 +225,6 @@
       "Lower to shoulder height each rep"
     ],
     "voice_intro": "Shoulder press. Brace your core and press straight overhead.",
-    "voice_encouragement": ["Strong press!", "Full lockout, nice!", "Keep it steady!"]
+    "voice_encouragement": ["Strong press!", "Full lockout, nice!", "Rock solid core!"]
   }
 }

@@ -5,3 +5,7 @@ dist/
 .next/
 __pycache__/
 *.pyc
+backend/ai_coach.db
+backend/static/audio/
+backend/.env
+.pytest_cache/

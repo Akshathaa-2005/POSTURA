@@ -1,5 +1,7 @@
 import type { RepConfig, RepEvent, RepPhase } from "@/types";
 
+export type RepCount = Omit<RepEvent, "faults">;
+
 /** A movement must travel at least this fraction of the way to the peak to count as a (partial) attempt. */
 const PARTIAL_THRESHOLD = 0.5;
 /** Leave the peak phase once progress drops below this (hysteresis against jitter). */
@@ -19,13 +21,13 @@ export class RepCounter {
 
   constructor(private readonly config: RepConfig) {}
 
-  progress(angle: number): number {
+  progress(value: number): number {
     const { start_threshold: start, peak_threshold: peak } = this.config;
-    return (angle - start) / (peak - start);
+    return (value - start) / (peak - start);
   }
 
-  update(angle: number, now: number): RepEvent | null {
-    const p = this.progress(angle);
+  update(value: number, now: number): RepCount | null {
+    const p = this.progress(value);
 
     if (p <= 0) {
       const wasMoving = this.phase !== "start";

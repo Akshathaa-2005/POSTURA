@@ -78,11 +78,11 @@ export const FIGURE_POSES: Record<string, [FigurePose, FigurePose]> = {
     }),
   ],
   bicep_curl: [
-    { ...front, lE: [39, 46], rE: [61, 46], lW: [38, 62], rW: [62, 62] },
-    { ...front, lE: [39, 46], rE: [61, 46], lW: [35, 30], rW: [65, 30] },
+    side,
+    { ...side, lW: [62, 33], rW: [62, 33] }, // elbow stays pinned, forearm curls up
   ],
   shoulder_press: [
-    { ...front, lE: [27, 33], rE: [73, 33], lW: [28, 17], rW: [72, 17] },
-    { ...front, lE: [36, 13], rE: [64, 13], lW: [41, -2], rW: [59, -2] },
+    { ...side, lE: [57, 38], rE: [57, 38], lW: [55, 22], rW: [55, 22] }, // hands at shoulder height
+    { ...side, lE: [58, 13], rE: [58, 13], lW: [60, -3], rW: [60, -3] }, // locked out, arms by the ears
   ],
 };
