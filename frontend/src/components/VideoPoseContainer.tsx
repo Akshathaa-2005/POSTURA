@@ -1,3 +1,4 @@
+import { useFormModel } from "@/hooks/useFormModel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Exercise, FormIssue, RepEvent } from "@/types";
@@ -44,6 +45,9 @@ export default function VideoPoseContainer({
   const [dims, setDims] = useState({ width: 0, height: 0 });
   const frameRef = useRef<SkeletonFrame>({ landmarks: null, jointStatus: new Map(), angles: {}, updatedAt: 0 });
 
+  const formModel = useFormModel();
+  const modelRef = useRef(formModel);
+  modelRef.current = formModel;
   const engine = useMemo(() => new WorkoutEngine(exercise), [exercise, sessionKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const lastPush = useRef(0);
   const lastFrameAt = useRef<number | null>(null);
@@ -68,6 +72,13 @@ export default function VideoPoseContainer({
       };
       if (snap.repEvent) {
         pendingEvent.current = snap.repEvent;
+        const ev = snap.repEvent;
+        if (ev.window && modelRef.current) {
+          modelRef.current
+            .read(exercise.id, ev.window)
+            .then((read) => read && useWorkoutState.getState().setModelRead({ ...read, at: ev.at, repType: ev.type }))
+            .catch((err) => console.warn("[form model] scoring failed", err));
+        }
         callbacks.current.onRepEvent?.(snap.repEvent, snap.reps);
       }
       if (snap.coachIssue) callbacks.current.onCoachIssue?.(snap.coachIssue);
@@ -84,7 +95,7 @@ export default function VideoPoseContainer({
         pendingEvent.current = null;
       }
     },
-    [engine, dims.width, dims.height, applySnapshot],
+    [engine, exercise.id, dims.width, dims.height, applySnapshot],
   );
 
   const { status, error } = usePoseDetection(videoRef, { enabled: cameraOn, paused, onResults });

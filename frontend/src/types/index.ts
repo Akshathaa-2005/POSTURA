@@ -55,6 +55,12 @@ export interface FaultRule {
   cue: string;
   /** Used instead of `cue` when only one side is at fault (front view). `{side}` → left/right. */
   cue_side?: string;
+  /**
+   * A rep-level rule that must be measurable for a rep to count. If the metric can't be seen during the rep
+   * (for example the feet are out of frame), the rep is not counted and `unseen_cue` is shown instead.
+   */
+  required?: boolean;
+  unseen_cue?: string;
 }
 
 export interface SetupRule {
@@ -118,6 +124,15 @@ export interface FormIssue {
 
 export type RepPhase = "start" | "moving" | "peak";
 
+/** One rep's normalised skeleton (see src/ml/skeleton.ts), for recording and for the form model. */
+export interface RepWindow {
+  frames: number;
+  /** frames × 17 joints × (x, y, visibility), flattened. */
+  joints: Float64Array;
+  /** frames × (cos tilt, sin tilt, torso valid), flattened. */
+  context: Float64Array;
+}
+
 export interface RepEvent {
   /** "partial" = not counted: the rep fell short or had a major fault. */
   type: "rep" | "partial";
@@ -128,6 +143,8 @@ export interface RepEvent {
   faults: FaultHit[];
   /** Why a rep wasn't counted when no fault explains it. */
   note?: string;
+  /** The rep's skeleton, when it could be captured cleanly. */
+  window?: RepWindow;
 }
 
 export type DetectionStatus =

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { GetStaticPaths, GetStaticProps } from "next";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import DashboardPanel from "@/components/DashboardPanel";
 import Layout from "@/components/Layout";
 import VideoPoseContainer from "@/components/VideoPoseContainer";
@@ -16,6 +17,12 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
   const [sessionKey, setSessionKey] = useState(0);
   const [mirrored, setMirrored] = useLocalStorage("aicoach.mirrored", true);
   const [showAngles, setShowAngles] = useLocalStorage("aicoach.showAngles", false);
+  const router = useRouter();
+  // Record mode is for collecting labelled reps to train the form model: open any workout with ?record=1.
+  const [record, setRecord] = useLocalStorage("postura.record", false);
+  useEffect(() => {
+    if (router.query.record === "1") setRecord(true);
+  }, [router.query.record, setRecord]);
   const status = useWorkoutState((s) => s.status);
   const reset = useWorkoutState((s) => s.reset);
 
@@ -53,6 +60,7 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
         <div className="flex flex-wrap gap-2">
           <Toggle active={mirrored} onClick={() => setMirrored((m) => !m)}>Mirror</Toggle>
           <Toggle active={showAngles} onClick={() => setShowAngles((v) => !v)}>Angles</Toggle>
+          {record && <Toggle active onClick={() => setRecord(false)}>Recording</Toggle>}
           <ControlButton disabled={!live} onClick={() => setPaused((p) => !p)}>
             {paused ? "Resume" : "Pause"}
           </ControlButton>
@@ -78,7 +86,7 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
           onCoachIssue={sendIssue}
           onPraise={sendPraise}
         />
-        <DashboardPanel exercise={exercise} mirrored={mirrored} />
+        <DashboardPanel exercise={exercise} mirrored={mirrored} record={record} />
       </div>
     </Layout>
   );

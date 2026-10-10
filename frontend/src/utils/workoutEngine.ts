@@ -27,6 +27,7 @@ import {
   type MetricValue,
 } from "./poseValidation";
 import { RepCounter } from "./repCounter";
+import { RepRecorder } from "../ml/recorder";
 
 /** Weight of the newest sample in the exponential moving averages. */
 const LANDMARK_SMOOTHING = 0.6;
@@ -115,6 +116,9 @@ export class WorkoutEngine {
   private liveLast = new Map<string, { hit: FaultHit; at: number }>();
   private setupFailSince: number | null = null;
   private lastIssueKey: string | null = null;
+  private readonly recorder = new RepRecorder();
+  /** Why the last rep couldn't be judged (body or feet out of frame), shown until the next rep. */
+  private seenProblem: { message: string; at: number } | null = null;
 
   private holdMs = 0;
   private lastFrameAt: number | null = null;
@@ -170,15 +174,19 @@ export class WorkoutEngine {
     let repEvent: RepEvent | null = null;
     if (this.counter && inFrame && setupOk) {
       const count = this.counter.update(repValues.reduce((s, v) => s + v.value, 0) / repValues.length, now);
+      this.recorder.push(raw, width, height, this.counter.phase !== "start" || count !== null);
       if (this.counter.phase !== "start") {
         this.aggregateRep(metrics);
         this.repFrames += 1;
       }
       if (count) {
         repEvent = this.judgeRep(count);
+        repEvent.window = this.recorder.finish() ?? undefined;
         this.onRep(repEvent, now);
+        if (repEvent.note && !repEvent.faults.length) this.seenProblem = { message: repEvent.note, at: now };
       } else if (this.counter.phase === "start") {
         this.resetRep();
+        this.recorder.discard();
       }
     } else if (this.counter && this.counter.phase !== "start") {
       // Keep what was measured so far; leaving the frame mid-rep must not wipe the evidence.
@@ -299,16 +307,31 @@ export class WorkoutEngine {
 
   /** A rep counts only if it reached the target, had no major fault, and stayed in view. */
   private judgeRep(count: Omit<RepEvent, "faults">): RepEvent {
+    const unseen = this.repRules.find(
+      (r) => r.required && ![...this.repAgg.keys()].some((k) => k.startsWith(`${r.metric}:`)),
+    );
     const faults = this.evaluateRep();
     for (const [id, { hit, frames }] of this.repLiveBad) {
       if (frames >= REP_BAD_FRAMES && !faults.some((f) => f.rule.id === id)) faults.push(hit);
     }
     faults.sort((a, b) => severityRank(b.status) - severityRank(a.status));
     const lost = this.repLostFrames > (this.repFrames + this.repLostFrames) * MAX_LOST_FRACTION;
+    if (process.env.NODE_ENV !== "production") {
+      console.info("[rep]", count.type, {
+        rom: count.rom,
+        faults: faults.map((f) => `${f.rule.id}:${f.status}@${Math.round(f.value)}`),
+        framesInRep: this.repFrames,
+        framesLost: this.repLostFrames,
+        counted: count.type === "rep" && !faults.some((f) => f.status === "bad") && !lost,
+      });
+    }
     this.resetRep();
 
     if (count.type !== "rep") return { ...count, faults };
     if (faults.some((f) => f.status === "bad")) return { ...count, type: "partial", faults };
+    if (unseen) {
+      return { ...count, type: "partial", faults, note: unseen.unseen_cue ?? "Step back so your whole body is in frame" };
+    }
     if (lost) return { ...count, type: "partial", faults, note: "Stay fully in frame for the whole rep" };
     this.counter!.commit();
     return { ...count, faults };
@@ -384,7 +407,12 @@ export class WorkoutEngine {
         order(a.hit) - order(b.hit),
     );
     const top = candidates[0];
-    if (!top) return null;
+    if (!top) {
+      if (this.seenProblem && now - this.seenProblem.at < REP_ISSUE_MS) {
+        return { id: "unseen", label: "Can't see you", message: this.seenProblem.message, status: "warn", side: null, fromRep: true };
+      }
+      return null;
+    }
     return {
       id: top.hit.rule.id,
       label: top.hit.rule.label,

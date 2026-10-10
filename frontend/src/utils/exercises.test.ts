@@ -46,6 +46,10 @@ describe("exercise catalog", () => {
         expect(f.agg).toBeDefined();
       }
       if (f.cue_side) expect(f.cue_side).toContain("{side}");
+      if (f.required) {
+        expect(f.when, "only rep-level rules can be required").toBe("rep");
+        expect(f.unseen_cue, "say what to do when it can't be seen").toBeTruthy();
+      }
       // A rep fault on the rep's own metric must be reachable: its warn line can't sit behind the start line.
       if (f.when === "rep" && ex.rep && f.metric === ex.rep.metric) {
         const { direction, start_threshold: start } = ex.rep;

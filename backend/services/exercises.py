@@ -22,6 +22,8 @@ def get_fault(exercise: dict[str, Any], fault_id: str) -> dict[str, Any] | None:
     """A fault rule by id; "setup" is the exercise's starting-position hint."""
     if fault_id == "setup" and exercise.get("setup"):
         return {"id": "setup", "label": "Get into position", "cue": exercise["setup"]["cue"]}
+    if fault_id == "unseen":
+        return {"id": "unseen", "label": "Can't see you", "cue": "Step back so your whole body is in frame"}
     return next((f for f in exercise.get("faults", []) if f["id"] == fault_id), None)
 
 

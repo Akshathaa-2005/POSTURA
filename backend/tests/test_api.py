@@ -114,5 +114,7 @@ def test_protocol_errors():
             assert "Unknown fault" in receive_until(ws, "error")["message"]
             ws.send_json({"type": "issue", "fault_id": "shallow_squat", "status": "terrible"})
             assert "Invalid issue" in receive_until(ws, "error")["message"]
+            ws.send_json({"type": "issue", "fault_id": "unseen", "status": "warn", "from_rep": True})
+            assert receive_until(ws, "correction")["label"] == "Can't see you"
             ws.send_json({"type": "pose"})
             assert "Unknown message type" in receive_until(ws, "error")["message"]

@@ -67,6 +67,7 @@ function frontPose({
   leftKneeY = 750,
   hipY = 600,
   kneeSpread,
+  legs = true,
 }: {
   left?: number;
   right?: number;
@@ -75,6 +76,8 @@ function frontPose({
   hipY?: number;
   /** Absolute knee x offset from centre (overrides the default, which follows the stance). */
   kneeSpread?: number;
+  /** False simulates a webcam too close to see the legs. */
+  legs?: boolean;
 }) {
   const LS: P = [550, 300]; // person's left appears on image right when facing the camera
   const RS: P = [450, 300];
@@ -92,7 +95,7 @@ function frontPose({
     23: [530, hipY], 24: [470, hipY],
     25: [500 + (kneeSpread ?? half * 0.8 + 20), leftKneeY], 26: [500 - (kneeSpread ?? half * 0.8 + 20), 750],
     27: [500 + half, 900], 28: [500 - half, 900],
-  });
+  }, legs ? {} : { 25: 0, 26: 0, 27: 0, 28: 0 });
 }
 
 interface Run {
@@ -379,5 +382,81 @@ describe("reps only count with acceptable form", () => {
     const r = run(new WorkoutEngine(squat), [sidePose(), sidePose({ knee: 96 }), sidePose()]);
     expect(last(r).reps).toBe(1);
     expect(r.reps[0].faults[0]).toMatchObject({ status: "warn" });
+  });
+});
+
+describe("rep windows for the form model", () => {
+  const squat = getExercise("squat")!;
+  const reps = (poses: Landmark[][]) => run(new WorkoutEngine(squat), poses).reps;
+  const cycle = [sidePose(), sidePose({ knee: 90, lean: 30 }), sidePose()];
+
+  /** The same pose seen by a camera that is further away and off to one side (and slightly rolled). */
+  const moved = (pose: Landmark[], k: number, dx: number, dy: number, roll = 0): Landmark[] =>
+    pose.map((p) => {
+      const x = (p.x * W - 500) * k;
+      const y = (p.y * H - 500) * k;
+      const c = Math.cos(roll);
+      const s = Math.sin(roll);
+      return { ...p, x: (x * c - y * s + 500 + dx) / W, y: (x * s + y * c + 500 + dy) / H };
+    });
+
+  it("attaches the normalised skeleton to each rep", () => {
+    const [rep] = reps(cycle);
+    expect(rep.window).toBeDefined();
+    const w = rep.window!;
+    expect(w.frames).toBeGreaterThanOrEqual(8);
+    expect(w.joints.length).toBe(w.frames * 17 * 3);
+    expect(w.context.length).toBe(w.frames * 3);
+    expect([...w.joints].every(Number.isFinite)).toBe(true);
+  });
+
+  it("is the same wherever the camera is and however far away", () => {
+    const [near] = reps(cycle);
+    const [far] = reps(cycle.map((p) => moved(p, 0.55, -140, 60, (12 * Math.PI) / 180)));
+    expect(far.window!.frames).toBe(near.window!.frames);
+    for (let i = 0; i < near.window!.joints.length; i++) {
+      expect(Math.abs(far.window!.joints[i] - near.window!.joints[i]), `value ${i}`).toBeLessThan(1e-6);
+    }
+  });
+
+  it("captures not-counted reps too, since those are the ones worth labelling", () => {
+    const [rep] = reps([sidePose(), sidePose({ knee: 125 }), sidePose()]);
+    expect(rep.type).toBe("partial");
+    expect(rep.window).toBeDefined();
+  });
+
+  it("captures nothing for a movement that never became a rep", () => {
+    const r = run(new WorkoutEngine(squat), [sidePose(), sidePose({ knee: 150 }), sidePose()]);
+    expect(r.reps).toEqual([]);
+  });
+});
+
+describe("jumping jacks need the feet, not just the arms", () => {
+  const jj = getExercise("jumping_jack")!;
+  const down = (o = {}) => frontPose({ left: 10, right: 10, stance: 0.6, ...o });
+
+  it("counts arms overhead with the feet jumped wide", () => {
+    const r = run(new WorkoutEngine(jj), [down(), frontPose({ left: 170, right: 170, stance: 2 }), down()]);
+    expect(last(r).reps).toBe(1);
+  });
+
+  it("doesn't count raising the arms while standing still", () => {
+    const r = run(new WorkoutEngine(jj), [down(), frontPose({ left: 170, right: 170, stance: 0.7 }), down()]);
+    expect(last(r).reps).toBe(0);
+    expect(r.reps[0]).toMatchObject({ type: "partial" });
+    expect(r.reps[0].faults[0]).toMatchObject({ status: "bad", rule: { id: "feet_narrow" } });
+  });
+
+  it("doesn't count it with the feet only shoulder-width apart either", () => {
+    const r = run(new WorkoutEngine(jj), [down({ stance: 1.1 }), frontPose({ left: 170, right: 170, stance: 1.2 }), down({ stance: 1.1 })]);
+    expect(last(r).reps).toBe(0);
+  });
+
+  it("doesn't count reps when the legs are out of frame, and says why", () => {
+    const r = run(new WorkoutEngine(jj), [down({ legs: false }), frontPose({ left: 170, right: 170, stance: 2, legs: false }), down({ legs: false })]);
+    expect(last(r).reps).toBe(0);
+    expect(r.reps[0].type).toBe("partial");
+    expect(r.reps[0].note).toMatch(/feet are in frame/);
+    expect(last(r).issue).toMatchObject({ id: "unseen", label: "Can't see you" });
   });
 });

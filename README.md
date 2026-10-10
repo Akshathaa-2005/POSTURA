@@ -95,6 +95,29 @@ Every guide shows the same described coach, because Stable Diffusion doesn't kee
 The first run downloads ~4 GB of models. Models are CreativeML OpenRAIL-M licensed (commercial use allowed
 with use-based restrictions). Without guides, the animated line figure is shown instead.
 
+## Training the form model
+
+A spatio-temporal graph network (ST-GCN with self-attention) can score each rep next to the rules. It needs labelled
+reps first. Details and measured numbers are in [ARCHITECTURE.md](ARCHITECTURE.md#6-form-model-st-gcn-with-self-attention).
+
+```bash
+# 1. Collect: open any workout with ?record=1, do reps, label each (G = good, 1-9 = faults, Enter = save),
+#    press "Download reps", and put the JSON files in backend/ml/data/recordings/
+# 2. Train (needs: .venv/bin/pip install -r requirements-ml.txt)
+cd backend
+.venv/bin/python -m ml.train --data ml/data/recordings --out ml/artifacts/run1
+# 3. Export to ONNX (fp32 + INT8) and check it reproduces PyTorch
+.venv/bin/python -m ml.export_onnx --ckpt ml/artifacts/run1/best.pt --data ml/data/recordings --out ml/artifacts/run1/onnx
+.venv/bin/python -m ml.make_model_io ml/artifacts/run1/onnx ml/data/recordings
+# 4. Benchmark in the browser runtime, then install
+cd ../frontend && npm run bench:model -- ../backend/ml/artifacts/run1/onnx
+mkdir -p public/models/form && cp ../backend/ml/artifacts/run1/onnx/{model_meta.json,form_model.int8.onnx,form_model.fp32.onnx} public/models/form/
+```
+
+`metrics.json` from step 2 compares the model with the rule engine on held-out reps. Only install the model if it
+wins. To test the pipeline without data: `python -m ml.synthetic`, then train and export with `--synthetic`; that
+model refuses to load in a production build.
+
 ## Adding an exercise
 
 Add an entry to [`exercises/exercises.json`](exercises/exercises.json) (shared by frontend and backend):

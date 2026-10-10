@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { ModelRead } from "@/ml/formModel";
 import type { DetectionStatus, FormIssue, JointStatus, RepEvent, RepPhase, ScoreBreakdown } from "@/types";
 import type { EngineSnapshot } from "@/utils/workoutEngine";
 import type { ConnectionState } from "@/utils/websocket";
@@ -56,6 +57,8 @@ interface WorkoutState {
   issue: FormIssue | null;
   issueSnapshot: IssueSnapshot | null;
   lastEvent: RepEvent | null;
+  /** The form model's read of the last rep, when a model is installed. */
+  modelRead: (ModelRead & { at: number; repType: RepEvent["type"] }) | null;
   fps: number;
   /** Time spent actively tracking (excludes pauses). */
   activeMs: number;
@@ -63,6 +66,7 @@ interface WorkoutState {
 
   reset: (exerciseId: string, repTarget: number) => void;
   setStatus: (status: DetectionStatus, error?: string | null) => void;
+  setModelRead: (read: WorkoutState["modelRead"]) => void;
   applySnapshot: (
     s: EngineSnapshot,
     extra: { fps: number; dtMs: number; event: RepEvent | null; aspect: number },
@@ -92,6 +96,7 @@ const initialMetrics = {
   issue: null,
   issueSnapshot: null,
   lastEvent: null,
+  modelRead: null,
   fps: 0,
   activeMs: 0,
 };
@@ -116,6 +121,8 @@ export const useWorkoutState = create<WorkoutState>((set) => ({
   setCoach: (patch) => set((state) => ({ coach: { ...state.coach, ...patch } })),
 
   setStatus: (status, error = null) => set({ status, error }),
+
+  setModelRead: (modelRead) => set({ modelRead }),
 
   applySnapshot: (s, { fps, dtMs, event, aspect }) =>
     set((state) => ({

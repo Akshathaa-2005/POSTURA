@@ -8,14 +8,17 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "setup:mediapipe": "node scripts/setup-mediapipe.mjs",
-    "postinstall": "node scripts/setup-mediapipe.mjs",
+    "postinstall": "node scripts/setup-mediapipe.mjs && node scripts/setup-ort.mjs",
     "test": "vitest run",
-    "export:figures": "vite-node scripts/export-figures.ts"
+    "export:figures": "vite-node scripts/export-figures.ts",
+    "setup:ort": "node scripts/setup-ort.mjs",
+    "bench:model": "node scripts/bench-model.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.35",
     "framer-motion": "11.18.2",
     "next": "15.5.26",
+    "onnxruntime-web": "1.30.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "zustand": "4.5.7"

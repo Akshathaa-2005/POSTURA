@@ -34,9 +34,11 @@
         "metric": "stance_width",
         "agg": "max",
         "op": "<",
-        "warn": 1.5,
-        "bad": 1.15,
-        "cue": "Jump your feet wider — land just past shoulder width"
+        "warn": 1.7,
+        "bad": 1.35,
+        "cue": "Jump your feet wider — land well past shoulder width",
+        "required": true,
+        "unseen_cue": "Step back so your feet are in frame — a jumping jack needs your whole body visible"
       },
       {
         "id": "bent_arms",

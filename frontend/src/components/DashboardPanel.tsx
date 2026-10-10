@@ -3,19 +3,23 @@ import type { Exercise } from "@/types";
 import { formatDuration, formatPercent } from "@/utils/formatters";
 import AICoachOverlay from "./AICoachOverlay";
 import CurrentIssueCard from "./CurrentIssueCard";
+import FormModelCard from "./FormModelCard";
 import FormScoreMeter from "./FormScoreMeter";
+import RecordPanel from "./RecordPanel";
 import RepCounter from "./RepCounter";
 
-export default function DashboardPanel({ exercise, mirrored }: { exercise: Exercise; mirrored: boolean }) {
+export default function DashboardPanel({ exercise, mirrored, record = false }: { exercise: Exercise; mirrored: boolean; record?: boolean }) {
   const activeMs = useWorkoutState((s) => s.activeMs);
   const averageScore = useWorkoutState((s) => s.averageScore);
   const fps = useWorkoutState((s) => s.fps);
 
   return (
     <aside className="flex flex-col gap-4 lg:sticky lg:top-6">
+      {record && <RecordPanel exercise={exercise} />}
       <FormScoreMeter />
       <RepCounter exercise={exercise} />
       <CurrentIssueCard exercise={exercise} mirrored={mirrored} />
+      <FormModelCard exercise={exercise} />
       <AICoachOverlay />
 
       <section className="grid grid-cols-3 divide-x divide-slate/10 overflow-hidden rounded-[22px] bg-sand/60">
