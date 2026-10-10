@@ -1,5 +1,6 @@
 import type { AppProps } from "next/app";
 import { Cormorant_Garamond, Jost } from "next/font/google";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import "@/styles/globals.css";
 
 const cormorant = Cormorant_Garamond({
@@ -13,7 +14,9 @@ const jost = Jost({ subsets: ["latin"], weight: ["300", "400", "500"], variable:
 export default function App({ Component, pageProps }: AppProps) {
   return (
     <div className={`${cormorant.variable} ${jost.variable} font-sans`}>
-      <Component {...pageProps} />
+      <ErrorBoundary>
+        <Component {...pageProps} />
+      </ErrorBoundary>
     </div>
   );
 }

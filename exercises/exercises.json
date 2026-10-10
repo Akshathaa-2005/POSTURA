@@ -8,25 +8,44 @@
     "description": "Full-body cardio exercise. Jump the feet out while sweeping the arms overhead, then return.",
     "camera_setup": "Face the camera, full body in frame",
     "view": "front",
-    "rep": { "metric": "shoulder", "direction": "increase", "start_threshold": 40, "peak_threshold": 120 },
+    "rep": {
+      "metric": "shoulder",
+      "direction": "increase",
+      "start_threshold": 40,
+      "peak_threshold": 150
+    },
     "faults": [
       {
         "id": "arms_not_overhead",
         "label": "Arms not overhead",
-        "when": "rep", "metric": "hands_overhead", "agg": "max", "op": "<", "warn": 0, "bad": -0.4,
+        "when": "rep",
+        "metric": "hands_overhead",
+        "agg": "max",
+        "op": "<",
+        "warn": 0,
+        "bad": -0.3,
         "cue": "Reach all the way up — bring your hands above your head",
         "cue_side": "Your {side} arm isn't reaching overhead — swing it all the way up"
       },
       {
         "id": "feet_narrow",
         "label": "Feet too narrow",
-        "when": "rep", "metric": "stance_width", "agg": "max", "op": "<", "warn": 1.5, "bad": 1.15,
+        "when": "rep",
+        "metric": "stance_width",
+        "agg": "max",
+        "op": "<",
+        "warn": 1.5,
+        "bad": 1.15,
         "cue": "Jump your feet wider — land just past shoulder width"
       },
       {
         "id": "bent_arms",
         "label": "Bent arms",
-        "when": "active", "metric": "elbow", "op": "<", "warn": 140, "bad": 110,
+        "when": "active",
+        "metric": "elbow",
+        "op": "<",
+        "warn": 140,
+        "bad": 110,
         "cue": "Keep your arms long — straighten through the elbows",
         "cue_side": "Straighten your {side} arm through the whole swing"
       }
@@ -38,7 +57,11 @@
       "Engage your core throughout"
     ],
     "voice_intro": "Let's do jumping jacks! Reach all the way overhead and land softly.",
-    "voice_encouragement": ["You're doing great!", "Keep up the pace!", "Nice, full reach!"]
+    "voice_encouragement": [
+      "You're doing great!",
+      "Keep up the pace!",
+      "Nice, full reach!"
+    ]
   },
   "squat": {
     "name": "Bodyweight Squat",
@@ -49,18 +72,32 @@
     "description": "Sit the hips back and down until the thighs are about parallel, then drive back up.",
     "camera_setup": "Turn sideways to the camera, full body in frame",
     "view": "side",
-    "rep": { "metric": "knee", "direction": "decrease", "start_threshold": 160, "peak_threshold": 110 },
+    "rep": {
+      "metric": "knee",
+      "direction": "decrease",
+      "start_threshold": 160,
+      "peak_threshold": 100
+    },
     "faults": [
       {
         "id": "shallow_squat",
         "label": "Not deep enough",
-        "when": "rep", "metric": "knee", "agg": "min", "op": ">", "warn": 100, "bad": 115,
+        "when": "rep",
+        "metric": "knee",
+        "agg": "min",
+        "op": ">",
+        "warn": 90,
+        "bad": 110,
         "cue": "Sink a little deeper — aim for thighs parallel to the floor"
       },
       {
         "id": "chest_forward",
         "label": "Chest dropping",
-        "when": "active", "metric": "torso_lean", "op": ">", "warn": 45, "bad": 60,
+        "when": "active",
+        "metric": "torso_lean",
+        "op": ">",
+        "warn": 45,
+        "bad": 60,
         "cue": "Lift your chest — keep your torso tall as you sit back"
       }
     ],
@@ -71,7 +108,11 @@
       "Drive up through your heels"
     ],
     "voice_intro": "Time for squats. Sit back, chest up, and drive through your heels.",
-    "voice_encouragement": ["Strong rep!", "Great depth!", "Lovely, chest up!"]
+    "voice_encouragement": [
+      "Strong rep!",
+      "Great depth!",
+      "Lovely, chest up!"
+    ]
   },
   "push_up": {
     "name": "Push-Up",
@@ -83,27 +124,47 @@
     "camera_setup": "Turn sideways to the camera, whole body visible",
     "view": "side",
     "setup": {
-      "metric": "torso_lean", "op": ">", "value": 55,
+      "metric": "torso_lean",
+      "op": ">",
+      "value": 55,
       "cue": "Get into a high plank — hands under your shoulders, body in one line"
     },
-    "rep": { "metric": "elbow", "direction": "decrease", "start_threshold": 150, "peak_threshold": 110 },
+    "rep": {
+      "metric": "elbow",
+      "direction": "decrease",
+      "start_threshold": 150,
+      "peak_threshold": 100
+    },
     "faults": [
       {
         "id": "hips_sagging",
         "label": "Hips sagging",
-        "when": "always", "metric": "hip_sag", "op": ">", "warn": 7, "bad": 14,
+        "when": "always",
+        "metric": "hip_sag",
+        "op": ">",
+        "warn": 7,
+        "bad": 14,
         "cue": "Lift your hips — squeeze your glutes and brace your core"
       },
       {
         "id": "hips_piking",
         "label": "Hips too high",
-        "when": "always", "metric": "hip_sag", "op": "<", "warn": -9, "bad": -16,
+        "when": "always",
+        "metric": "hip_sag",
+        "op": "<",
+        "warn": -9,
+        "bad": -16,
         "cue": "Lower your hips into one straight line from head to heels"
       },
       {
         "id": "shallow_push_up",
         "label": "Shallow rep",
-        "when": "rep", "metric": "elbow", "agg": "min", "op": ">", "warn": 100, "bad": 115,
+        "when": "rep",
+        "metric": "elbow",
+        "agg": "min",
+        "op": ">",
+        "warn": 90,
+        "bad": 115,
         "cue": "Lower your chest further — bend your elbows to about 90°"
       }
     ],
@@ -114,7 +175,11 @@
       "Move as one rigid plank"
     ],
     "voice_intro": "Push-ups next. Brace your core and keep a straight line from head to heels.",
-    "voice_encouragement": ["Solid plank!", "Great control!", "Keep pressing!"]
+    "voice_encouragement": [
+      "Solid plank!",
+      "Great control!",
+      "Keep pressing!"
+    ]
   },
   "lunge": {
     "name": "Forward Lunge",
@@ -125,18 +190,32 @@
     "description": "Step forward and lower until both knees reach about 90°, then push back to standing.",
     "camera_setup": "Turn sideways to the camera, full body in frame",
     "view": "side",
-    "rep": { "metric": "knee_min", "direction": "decrease", "start_threshold": 160, "peak_threshold": 115 },
+    "rep": {
+      "metric": "knee_min",
+      "direction": "decrease",
+      "start_threshold": 160,
+      "peak_threshold": 105
+    },
     "faults": [
       {
         "id": "shallow_lunge",
         "label": "Not deep enough",
-        "when": "rep", "metric": "knee_min", "agg": "min", "op": ">", "warn": 105, "bad": 120,
+        "when": "rep",
+        "metric": "knee_min",
+        "agg": "min",
+        "op": ">",
+        "warn": 95,
+        "bad": 120,
         "cue": "Drop lower — let both knees bend to about 90°"
       },
       {
         "id": "torso_lean",
         "label": "Leaning forward",
-        "when": "active", "metric": "torso_lean", "op": ">", "warn": 20, "bad": 35,
+        "when": "active",
+        "metric": "torso_lean",
+        "op": ">",
+        "warn": 20,
+        "bad": 35,
         "cue": "Stay tall — keep your chest up and torso upright"
       }
     ],
@@ -147,7 +226,11 @@
       "Push back through your front heel"
     ],
     "voice_intro": "Let's lunge. Long step, drop straight down, and stay tall.",
-    "voice_encouragement": ["Nice and deep!", "Great balance!", "Beautifully tall!"]
+    "voice_encouragement": [
+      "Nice and deep!",
+      "Great balance!",
+      "Beautifully tall!"
+    ]
   },
   "bicep_curl": {
     "name": "Bicep Curl",
@@ -158,24 +241,42 @@
     "description": "Curl the hands toward the shoulders with the elbows pinned to your sides.",
     "camera_setup": "Turn sideways to the camera, upper body and hips in frame",
     "view": "side",
-    "rep": { "metric": "elbow", "direction": "decrease", "start_threshold": 150, "peak_threshold": 75 },
+    "rep": {
+      "metric": "elbow",
+      "direction": "decrease",
+      "start_threshold": 150,
+      "peak_threshold": 60
+    },
     "faults": [
       {
         "id": "elbow_drift",
         "label": "Elbow drifting forward",
-        "when": "always", "metric": "shoulder", "op": ">", "warn": 25, "bad": 40,
+        "when": "always",
+        "metric": "shoulder",
+        "op": ">",
+        "warn": 25,
+        "bad": 40,
         "cue": "Pin your elbow to your side — only your forearm should move"
       },
       {
         "id": "partial_curl",
         "label": "Partial curl",
-        "when": "rep", "metric": "elbow", "agg": "min", "op": ">", "warn": 55, "bad": 70,
+        "when": "rep",
+        "metric": "elbow",
+        "agg": "min",
+        "op": ">",
+        "warn": 50,
+        "bad": 75,
         "cue": "Curl all the way up and squeeze at the top"
       },
       {
         "id": "swinging",
         "label": "Swinging",
-        "when": "active", "metric": "torso_lean", "op": ">", "warn": 10, "bad": 18,
+        "when": "active",
+        "metric": "torso_lean",
+        "op": ">",
+        "warn": 10,
+        "bad": 18,
         "cue": "Stand tall and still — no swinging from the hips"
       }
     ],
@@ -186,7 +287,11 @@
       "No swinging from the hips"
     ],
     "voice_intro": "Bicep curls. Elbows pinned, full squeeze at the top.",
-    "voice_encouragement": ["Great squeeze!", "Nice and controlled!", "Elbows tight, perfect!"]
+    "voice_encouragement": [
+      "Great squeeze!",
+      "Nice and controlled!",
+      "Elbows tight, perfect!"
+    ]
   },
   "shoulder_press": {
     "name": "Shoulder Press",
@@ -197,24 +302,43 @@
     "description": "Press the hands from shoulder height to straight overhead, then lower with control.",
     "camera_setup": "Turn sideways to the camera, upper body and hips in frame",
     "view": "side",
-    "rep": { "metric": "elbow", "direction": "increase", "start_threshold": 100, "peak_threshold": 150 },
+    "rep": {
+      "metric": "elbow",
+      "direction": "increase",
+      "start_threshold": 100,
+      "peak_threshold": 160
+    },
     "faults": [
       {
         "id": "no_lockout",
         "label": "No lockout",
-        "when": "rep", "metric": "elbow", "agg": "max", "op": "<", "warn": 165, "bad": 150,
+        "when": "rep",
+        "metric": "elbow",
+        "agg": "max",
+        "op": "<",
+        "warn": 166,
+        "bad": 150,
         "cue": "Press all the way up — fully straighten your arms overhead"
       },
       {
         "id": "pressing_forward",
         "label": "Pressing forward",
-        "when": "rep", "metric": "shoulder", "agg": "max", "op": "<", "warn": 155, "bad": 140,
+        "when": "rep",
+        "metric": "shoulder",
+        "agg": "max",
+        "op": "<",
+        "warn": 155,
+        "bad": 140,
         "cue": "Press straight up — finish with your arms by your ears"
       },
       {
         "id": "leaning_back",
         "label": "Leaning back",
-        "when": "active", "metric": "torso_lean", "op": ">", "warn": 10, "bad": 18,
+        "when": "active",
+        "metric": "torso_lean",
+        "op": ">",
+        "warn": 10,
+        "bad": 18,
         "cue": "Brace your core and keep your ribs down — don't lean back"
       }
     ],
@@ -225,6 +349,895 @@
       "Lower to shoulder height each rep"
     ],
     "voice_intro": "Shoulder press. Brace your core and press straight overhead.",
-    "voice_encouragement": ["Strong press!", "Full lockout, nice!", "Rock solid core!"]
+    "voice_encouragement": [
+      "Strong press!",
+      "Full lockout, nice!",
+      "Rock solid core!"
+    ]
+  },
+  "high_knees": {
+    "name": "High Knees",
+    "category": "cardio",
+    "difficulty": "beginner",
+    "duration_sec": 30,
+    "rep_target": 30,
+    "description": "Run on the spot, driving each knee up to hip height with a tall torso.",
+    "camera_setup": "Face the camera, full body in frame",
+    "view": "front",
+    "rep": {
+      "metric": "knee_lift_max",
+      "direction": "increase",
+      "start_threshold": -0.45,
+      "peak_threshold": -0.15
+    },
+    "faults": [
+      {
+        "id": "low_knees",
+        "label": "Knees too low",
+        "when": "rep",
+        "metric": "knee_lift_max",
+        "agg": "max",
+        "op": "<",
+        "warn": -0.05,
+        "bad": -0.25,
+        "cue": "Drive your knees higher — up to hip height"
+      },
+      {
+        "id": "leaning",
+        "label": "Leaning to one side",
+        "when": "active",
+        "metric": "torso_lean",
+        "op": ">",
+        "warn": 12,
+        "bad": 20,
+        "cue": "Stay tall and centred over your hips"
+      }
+    ],
+    "correction_tips": [
+      "Drive each knee up to hip height",
+      "Stay tall — don't lean back",
+      "Land softly on the balls of your feet",
+      "Pump your arms in rhythm"
+    ],
+    "voice_intro": "High knees! Drive those knees up to hip height and stay tall.",
+    "voice_encouragement": [
+      "Great rhythm!",
+      "Knees up, love it!",
+      "Keep that energy!"
+    ]
+  },
+  "glute_bridge": {
+    "name": "Glute Bridge",
+    "category": "core",
+    "difficulty": "beginner",
+    "duration_sec": 45,
+    "rep_target": 15,
+    "description": "Lying on your back with knees bent, drive your hips up until your body forms a line from shoulders to knees.",
+    "camera_setup": "Set the camera at floor level, side-on, whole body in frame",
+    "view": "side",
+    "setup": {
+      "metric": "torso_lean",
+      "op": ">",
+      "value": 50,
+      "cue": "Lie on your back, knees bent, feet flat on the floor"
+    },
+    "rep": {
+      "metric": "hip",
+      "direction": "increase",
+      "start_threshold": 140,
+      "peak_threshold": 165
+    },
+    "faults": [
+      {
+        "id": "no_extension",
+        "label": "Hips not fully up",
+        "when": "rep",
+        "metric": "hip",
+        "agg": "max",
+        "op": "<",
+        "warn": 170,
+        "bad": 158,
+        "cue": "Squeeze your glutes and push your hips all the way up"
+      },
+      {
+        "id": "feet_far",
+        "label": "Feet too far away",
+        "when": "active",
+        "metric": "knee",
+        "op": ">",
+        "warn": 115,
+        "bad": 130,
+        "cue": "Walk your feet closer — knees at about 90° at the top"
+      },
+      {
+        "id": "feet_close",
+        "label": "Feet too close",
+        "when": "active",
+        "metric": "knee",
+        "op": "<",
+        "warn": 65,
+        "cue": "Move your feet a little further from your hips"
+      }
+    ],
+    "correction_tips": [
+      "Drive through your heels",
+      "Squeeze your glutes at the top",
+      "Keep your ribs down",
+      "Lower slowly"
+    ],
+    "voice_intro": "Glute bridges. Drive through your heels and squeeze at the top.",
+    "voice_encouragement": [
+      "Strong squeeze!",
+      "Beautiful line!",
+      "Nice and controlled!"
+    ]
+  },
+  "plank": {
+    "name": "Plank",
+    "category": "core",
+    "difficulty": "beginner",
+    "duration_sec": 45,
+    "rep_target": 0,
+    "description": "Hold a straight line from head to heels on your forearms or hands.",
+    "camera_setup": "Set the camera at floor level, side-on, whole body in frame",
+    "view": "side",
+    "mode": "hold",
+    "hold_target_sec": 30,
+    "setup": {
+      "metric": "torso_lean",
+      "op": ">",
+      "value": 60,
+      "cue": "Get into a plank — elbows or hands under your shoulders, body in one line"
+    },
+    "faults": [
+      {
+        "id": "hips_sagging",
+        "label": "Hips sagging",
+        "when": "always",
+        "metric": "hip_sag",
+        "op": ">",
+        "warn": 7,
+        "bad": 14,
+        "cue": "Lift your hips — squeeze your glutes and brace your core"
+      },
+      {
+        "id": "hips_piking",
+        "label": "Hips too high",
+        "when": "always",
+        "metric": "hip_sag",
+        "op": "<",
+        "warn": -9,
+        "bad": -16,
+        "cue": "Lower your hips into one straight line from head to heels"
+      }
+    ],
+    "correction_tips": [
+      "Squeeze your glutes",
+      "Brace your core like you're about to be poked",
+      "Keep your neck long",
+      "Breathe steadily"
+    ],
+    "voice_intro": "Plank hold. Long line from head to heels, and breathe.",
+    "voice_encouragement": [
+      "Rock solid!",
+      "Steady, keep breathing!",
+      "Strong line, hold it!"
+    ]
+  },
+  "wall_sit": {
+    "name": "Wall Sit",
+    "category": "strength",
+    "difficulty": "beginner",
+    "duration_sec": 45,
+    "rep_target": 0,
+    "description": "Back flat against a wall, slide down until your knees are at 90° and hold.",
+    "camera_setup": "Turn sideways to the camera, full body in frame",
+    "view": "side",
+    "mode": "hold",
+    "hold_target_sec": 30,
+    "setup": {
+      "metric": "knee",
+      "op": "<",
+      "value": 125,
+      "cue": "Slide down the wall until your knees are bent"
+    },
+    "faults": [
+      {
+        "id": "too_high",
+        "label": "Not low enough",
+        "when": "always",
+        "metric": "knee",
+        "op": ">",
+        "warn": 105,
+        "bad": 115,
+        "cue": "Slide a little lower — thighs parallel to the floor"
+      },
+      {
+        "id": "too_low",
+        "label": "Too low",
+        "when": "always",
+        "metric": "knee",
+        "op": "<",
+        "warn": 75,
+        "cue": "Come up slightly — knees at about 90°"
+      },
+      {
+        "id": "off_wall",
+        "label": "Back off the wall",
+        "when": "always",
+        "metric": "torso_lean",
+        "op": ">",
+        "warn": 15,
+        "bad": 25,
+        "cue": "Press your back flat against the wall"
+      }
+    ],
+    "correction_tips": [
+      "Thighs parallel to the floor",
+      "Knees stacked over ankles",
+      "Back flat on the wall",
+      "Breathe through the burn"
+    ],
+    "voice_intro": "Wall sit. Slide down until your thighs are parallel, and hold.",
+    "voice_encouragement": [
+      "Hold strong!",
+      "You've got this!",
+      "Great depth, stay there!"
+    ]
+  },
+  "side_plank": {
+    "name": "Side Plank",
+    "category": "core",
+    "difficulty": "intermediate",
+    "duration_sec": 45,
+    "rep_target": 0,
+    "description": "Balance on one forearm and the side of your feet with your body in a straight line.",
+    "camera_setup": "Face the camera lying on your side, whole body in frame",
+    "view": "front",
+    "mode": "hold",
+    "hold_target_sec": 20,
+    "setup": {
+      "metric": "torso_lean",
+      "op": ">",
+      "value": 50,
+      "cue": "Lie on your side and lift onto your forearm, body in one line"
+    },
+    "faults": [
+      {
+        "id": "hips_dropping",
+        "label": "Hips dropping",
+        "when": "always",
+        "metric": "hip_sag",
+        "op": ">",
+        "warn": 7,
+        "bad": 14,
+        "cue": "Lift your hips — keep one long line from head to feet"
+      }
+    ],
+    "correction_tips": [
+      "Stack your shoulders over your elbow",
+      "Push the floor away",
+      "Lift your hips high",
+      "Keep your body in one plane"
+    ],
+    "voice_intro": "Side plank. Hips high, one long line.",
+    "voice_encouragement": [
+      "Hips high, great!",
+      "Steady and strong!",
+      "Beautiful line!"
+    ]
+  },
+  "sumo_squat": {
+    "name": "Sumo Squat",
+    "category": "strength",
+    "difficulty": "beginner",
+    "duration_sec": 45,
+    "rep_target": 15,
+    "description": "With a wide stance and toes turned out, sit straight down between your heels.",
+    "camera_setup": "Face the camera, full body in frame",
+    "view": "front",
+    "rep": {
+      "metric": "knee",
+      "direction": "decrease",
+      "start_threshold": 160,
+      "peak_threshold": 105
+    },
+    "faults": [
+      {
+        "id": "shallow_sumo",
+        "label": "Not deep enough",
+        "when": "rep",
+        "metric": "knee",
+        "agg": "min",
+        "op": ">",
+        "warn": 95,
+        "bad": 115,
+        "cue": "Sink deeper — sit straight down between your heels"
+      },
+      {
+        "id": "knees_caving",
+        "label": "Knees caving in",
+        "when": "active",
+        "metric": "knee_track",
+        "op": "<",
+        "warn": 0.95,
+        "bad": 0.8,
+        "cue": "Push your knees out over your toes"
+      },
+      {
+        "id": "narrow_stance",
+        "label": "Stance too narrow",
+        "when": "always",
+        "metric": "stance_width",
+        "op": "<",
+        "warn": 1.5,
+        "cue": "Step your feet wider — well past shoulder width"
+      }
+    ],
+    "correction_tips": [
+      "Feet wide, toes turned out",
+      "Push your knees out over your toes",
+      "Sit straight down, chest proud",
+      "Drive up through your heels"
+    ],
+    "voice_intro": "Sumo squats. Wide stance, knees out, sit straight down.",
+    "voice_encouragement": [
+      "Great depth!",
+      "Knees out, perfect!",
+      "Strong!"
+    ]
+  },
+  "lateral_raise": {
+    "name": "Lateral Raise",
+    "category": "strength",
+    "difficulty": "beginner",
+    "duration_sec": 45,
+    "rep_target": 12,
+    "description": "Raise your arms out to the sides to shoulder height with a soft bend in the elbows.",
+    "camera_setup": "Face the camera, full body in frame",
+    "view": "front",
+    "rep": {
+      "metric": "shoulder",
+      "direction": "increase",
+      "start_threshold": 30,
+      "peak_threshold": 80
+    },
+    "faults": [
+      {
+        "id": "raise_low",
+        "label": "Arms not high enough",
+        "when": "rep",
+        "metric": "shoulder",
+        "agg": "max",
+        "op": "<",
+        "warn": 85,
+        "bad": 70,
+        "cue": "Raise your arms all the way to shoulder height",
+        "cue_side": "Lift your {side} arm a little higher — to shoulder height"
+      },
+      {
+        "id": "raise_high",
+        "label": "Raising too high",
+        "when": "active",
+        "metric": "shoulder",
+        "op": ">",
+        "warn": 105,
+        "bad": 120,
+        "cue": "Stop at shoulder height — don't shrug the weights up",
+        "cue_side": "Your {side} arm is going too high — stop at shoulder height"
+      },
+      {
+        "id": "bent_arms",
+        "label": "Arms too bent",
+        "when": "active",
+        "metric": "elbow",
+        "op": "<",
+        "warn": 145,
+        "bad": 120,
+        "cue": "Keep a long arm with just a soft bend in the elbows",
+        "cue_side": "Lengthen your {side} arm — just a soft bend in the elbow"
+      }
+    ],
+    "correction_tips": [
+      "Lead with your elbows",
+      "Stop at shoulder height",
+      "Keep your shoulders down, away from your ears",
+      "Lower slowly"
+    ],
+    "voice_intro": "Lateral raises. Lift out to shoulder height, nice and controlled.",
+    "voice_encouragement": [
+      "Smooth!",
+      "Great control!",
+      "Perfect height!"
+    ]
+  },
+  "front_raise": {
+    "name": "Front Raise",
+    "category": "strength",
+    "difficulty": "beginner",
+    "duration_sec": 45,
+    "rep_target": 12,
+    "description": "Raise your arms straight in front of you to shoulder height, then lower with control.",
+    "camera_setup": "Turn sideways to the camera, upper body and hips in frame",
+    "view": "side",
+    "rep": {
+      "metric": "shoulder",
+      "direction": "increase",
+      "start_threshold": 30,
+      "peak_threshold": 80
+    },
+    "faults": [
+      {
+        "id": "raise_low",
+        "label": "Not high enough",
+        "when": "rep",
+        "metric": "shoulder",
+        "agg": "max",
+        "op": "<",
+        "warn": 85,
+        "bad": 70,
+        "cue": "Lift to shoulder height, arms straight out in front"
+      },
+      {
+        "id": "swinging",
+        "label": "Swinging",
+        "when": "active",
+        "metric": "torso_lean",
+        "op": ">",
+        "warn": 10,
+        "bad": 18,
+        "cue": "Keep your torso still — no swinging"
+      },
+      {
+        "id": "bent_arms",
+        "label": "Arms too bent",
+        "when": "active",
+        "metric": "elbow",
+        "op": "<",
+        "warn": 145,
+        "bad": 120,
+        "cue": "Keep your arms long — just a soft bend in the elbows"
+      }
+    ],
+    "correction_tips": [
+      "Lift to shoulder height",
+      "Keep your arms long",
+      "Don't swing — stay still through the torso",
+      "Lower slowly"
+    ],
+    "voice_intro": "Front raises. Arms long, lift to shoulder height.",
+    "voice_encouragement": [
+      "Nice and steady!",
+      "Great height!",
+      "Smooth control!"
+    ]
+  },
+  "overhead_tricep_extension": {
+    "name": "Overhead Tricep Extension",
+    "category": "strength",
+    "difficulty": "beginner",
+    "duration_sec": 45,
+    "rep_target": 12,
+    "description": "With upper arms beside your ears, lower the hands behind your head and extend back up.",
+    "camera_setup": "Turn sideways to the camera, upper body and hips in frame",
+    "view": "side",
+    "setup": {
+      "metric": "shoulder",
+      "op": ">",
+      "value": 120,
+      "cue": "Raise your elbows overhead, upper arms beside your ears"
+    },
+    "rep": {
+      "metric": "elbow",
+      "direction": "increase",
+      "start_threshold": 90,
+      "peak_threshold": 155
+    },
+    "faults": [
+      {
+        "id": "no_lockout",
+        "label": "No lockout",
+        "when": "rep",
+        "metric": "elbow",
+        "agg": "max",
+        "op": "<",
+        "warn": 162,
+        "bad": 145,
+        "cue": "Straighten your arms fully overhead"
+      },
+      {
+        "id": "elbows_forward",
+        "label": "Elbows drifting forward",
+        "when": "always",
+        "metric": "shoulder",
+        "op": "<",
+        "warn": 150,
+        "bad": 135,
+        "cue": "Keep your upper arms vertical, elbows pointing up"
+      }
+    ],
+    "correction_tips": [
+      "Upper arms stay by your ears",
+      "Only the forearms move",
+      "Fully straighten at the top",
+      "Keep your ribs down"
+    ],
+    "voice_intro": "Overhead tricep extensions. Elbows point up, only your forearms move.",
+    "voice_encouragement": [
+      "Great lockout!",
+      "Elbows steady, perfect!",
+      "Strong!"
+    ]
+  },
+  "hip_hinge": {
+    "name": "Hip Hinge (Good Morning)",
+    "category": "mobility",
+    "difficulty": "beginner",
+    "duration_sec": 45,
+    "rep_target": 12,
+    "description": "With soft knees, push your hips back and tip your torso forward with a flat back, then stand tall.",
+    "camera_setup": "Turn sideways to the camera, full body in frame",
+    "view": "side",
+    "rep": {
+      "metric": "hip",
+      "direction": "decrease",
+      "start_threshold": 165,
+      "peak_threshold": 115
+    },
+    "faults": [
+      {
+        "id": "squatting",
+        "label": "Squatting instead of hinging",
+        "when": "active",
+        "metric": "knee",
+        "op": "<",
+        "warn": 140,
+        "bad": 125,
+        "cue": "Keep a soft knee bend — push your hips back, don't squat"
+      },
+      {
+        "id": "shallow_hinge",
+        "label": "Not hinging far enough",
+        "when": "rep",
+        "metric": "hip",
+        "agg": "min",
+        "op": ">",
+        "warn": 105,
+        "cue": "Hinge further — push your hips back until you feel your hamstrings",
+        "bad": 125
+      }
+    ],
+    "correction_tips": [
+      "Push your hips back to a wall behind you",
+      "Keep your back flat",
+      "Soft knees, not a squat",
+      "Stand tall and squeeze at the top"
+    ],
+    "voice_intro": "Hip hinges. Push your hips back, flat back, soft knees.",
+    "voice_encouragement": [
+      "Great hinge!",
+      "Lovely flat back!",
+      "Nice and smooth!"
+    ]
+  },
+  "reverse_lunge": {
+    "name": "Reverse Lunge",
+    "category": "strength",
+    "difficulty": "beginner",
+    "duration_sec": 45,
+    "rep_target": 12,
+    "description": "Step one foot back and lower until both knees reach about 90°, then drive back to standing.",
+    "camera_setup": "Turn sideways to the camera, full body in frame",
+    "view": "side",
+    "rep": {
+      "metric": "knee_min",
+      "direction": "decrease",
+      "start_threshold": 160,
+      "peak_threshold": 105
+    },
+    "faults": [
+      {
+        "id": "shallow_lunge",
+        "label": "Not deep enough",
+        "when": "rep",
+        "metric": "knee_min",
+        "agg": "min",
+        "op": ">",
+        "warn": 95,
+        "bad": 120,
+        "cue": "Drop lower — let both knees bend to about 90°"
+      },
+      {
+        "id": "torso_lean",
+        "label": "Leaning forward",
+        "when": "active",
+        "metric": "torso_lean",
+        "op": ">",
+        "warn": 20,
+        "bad": 35,
+        "cue": "Stay tall — keep your chest up and torso upright"
+      }
+    ],
+    "correction_tips": [
+      "Step back far enough",
+      "Lower straight down",
+      "Keep your chest up",
+      "Drive through the front heel"
+    ],
+    "voice_intro": "Reverse lunges. Big step back, drop straight down, stay tall.",
+    "voice_encouragement": [
+      "Nice and deep!",
+      "Great balance!",
+      "Strong drive!"
+    ]
+  },
+  "knee_push_up": {
+    "name": "Knee Push-Up",
+    "category": "strength",
+    "difficulty": "beginner",
+    "duration_sec": 45,
+    "rep_target": 12,
+    "description": "From your knees, lower your chest toward the floor in a straight line from head to knees, then press up.",
+    "camera_setup": "Set the camera at floor level, side-on, whole body in frame",
+    "view": "side",
+    "setup": {
+      "metric": "torso_lean",
+      "op": ">",
+      "value": 50,
+      "cue": "Kneel and walk your hands forward into a kneeling plank"
+    },
+    "rep": {
+      "metric": "elbow",
+      "direction": "decrease",
+      "start_threshold": 150,
+      "peak_threshold": 100
+    },
+    "faults": [
+      {
+        "id": "hips_bent",
+        "label": "Hips bent",
+        "when": "always",
+        "metric": "hip",
+        "op": "<",
+        "warn": 150,
+        "bad": 135,
+        "cue": "Keep a straight line from your head to your knees"
+      },
+      {
+        "id": "shallow_push_up",
+        "label": "Shallow rep",
+        "when": "rep",
+        "metric": "elbow",
+        "agg": "min",
+        "op": ">",
+        "warn": 90,
+        "bad": 115,
+        "cue": "Lower your chest further — bend your elbows to about 90°"
+      }
+    ],
+    "correction_tips": [
+      "Straight line from head to knees",
+      "Hands under your shoulders",
+      "Lower until elbows reach about 90°",
+      "Brace your core"
+    ],
+    "voice_intro": "Knee push-ups. Straight line from head to knees.",
+    "voice_encouragement": [
+      "Great form!",
+      "Keep pressing!",
+      "Solid line!"
+    ]
+  },
+  "side_lunge": {
+    "name": "Side Lunge",
+    "category": "strength",
+    "difficulty": "intermediate",
+    "duration_sec": 45,
+    "rep_target": 12,
+    "description": "Step wide to one side and sit back into that hip, keeping the other leg straight.",
+    "camera_setup": "Face the camera, full body in frame",
+    "view": "front",
+    "rep": {
+      "metric": "knee_min",
+      "direction": "decrease",
+      "start_threshold": 165,
+      "peak_threshold": 110
+    },
+    "faults": [
+      {
+        "id": "shallow_side_lunge",
+        "label": "Not deep enough",
+        "when": "rep",
+        "metric": "knee_min",
+        "agg": "min",
+        "op": ">",
+        "warn": 100,
+        "bad": 120,
+        "cue": "Sit deeper into the bending knee"
+      },
+      {
+        "id": "bent_straight_leg",
+        "label": "Straight leg bending",
+        "when": "peak",
+        "metric": "knee_max",
+        "op": "<",
+        "warn": 155,
+        "bad": 140,
+        "cue": "Keep your other leg long and straight"
+      }
+    ],
+    "correction_tips": [
+      "Step wide",
+      "Sit back into the bending hip",
+      "Keep the other leg straight",
+      "Chest up"
+    ],
+    "voice_intro": "Side lunges. Step wide, sit back, keep the other leg long.",
+    "voice_encouragement": [
+      "Great depth!",
+      "Nice and wide!",
+      "Strong!"
+    ]
+  },
+  "bent_over_row": {
+    "name": "Bent-Over Row",
+    "category": "strength",
+    "difficulty": "intermediate",
+    "duration_sec": 45,
+    "rep_target": 12,
+    "description": "Hinged forward with a flat back, pull your elbows back past your ribs, then lower.",
+    "camera_setup": "Turn sideways to the camera, full body in frame",
+    "view": "side",
+    "setup": {
+      "metric": "torso_lean",
+      "op": ">",
+      "value": 30,
+      "cue": "Hinge forward from the hips, back flat, torso at about 45°"
+    },
+    "rep": {
+      "metric": "elbow",
+      "direction": "decrease",
+      "start_threshold": 160,
+      "peak_threshold": 90
+    },
+    "faults": [
+      {
+        "id": "standing_up",
+        "label": "Standing up",
+        "when": "active",
+        "metric": "torso_lean",
+        "op": "<",
+        "warn": 40,
+        "bad": 33,
+        "cue": "Stay hinged forward — don't stand up as you row"
+      },
+      {
+        "id": "short_pull",
+        "label": "Short pull",
+        "when": "rep",
+        "metric": "elbow",
+        "agg": "min",
+        "op": ">",
+        "warn": 80,
+        "cue": "Pull your elbow all the way back past your ribs",
+        "bad": 100
+      }
+    ],
+    "correction_tips": [
+      "Hinge to about 45° with a flat back",
+      "Pull your elbows back past your ribs",
+      "Squeeze your shoulder blades",
+      "Don't stand up as you pull"
+    ],
+    "voice_intro": "Bent-over rows. Stay hinged, pull your elbows back.",
+    "voice_encouragement": [
+      "Great squeeze!",
+      "Strong pull!",
+      "Nice flat back!"
+    ]
+  },
+  "sit_up": {
+    "name": "Sit-Up",
+    "category": "core",
+    "difficulty": "intermediate",
+    "duration_sec": 45,
+    "rep_target": 12,
+    "description": "From lying with knees bent, curl your torso all the way up toward your knees, then lower with control.",
+    "camera_setup": "Set the camera at floor level, side-on, whole body in frame",
+    "view": "side",
+    "setup": {
+      "metric": "knee",
+      "op": "<",
+      "value": 130,
+      "cue": "Lie back with knees bent and feet flat on the floor"
+    },
+    "rep": {
+      "metric": "torso_lean",
+      "direction": "decrease",
+      "start_threshold": 70,
+      "peak_threshold": 35
+    },
+    "faults": [
+      {
+        "id": "partial_sit_up",
+        "label": "Partial sit-up",
+        "when": "rep",
+        "metric": "torso_lean",
+        "agg": "min",
+        "op": ">",
+        "warn": 30,
+        "bad": 45,
+        "cue": "Curl all the way up until your chest is close to your knees"
+      }
+    ],
+    "correction_tips": [
+      "Curl up one vertebra at a time",
+      "Keep your feet on the floor",
+      "Exhale as you come up",
+      "Lower slowly"
+    ],
+    "voice_intro": "Sit-ups. Curl all the way up, and lower slowly.",
+    "voice_encouragement": [
+      "Strong core!",
+      "All the way up, great!",
+      "Nice control!"
+    ]
+  },
+  "leg_raise": {
+    "name": "Lying Leg Raise",
+    "category": "core",
+    "difficulty": "intermediate",
+    "duration_sec": 45,
+    "rep_target": 12,
+    "description": "Lying flat, lift straight legs toward vertical, then lower slowly without touching the floor.",
+    "camera_setup": "Set the camera at floor level, side-on, whole body in frame",
+    "view": "side",
+    "setup": {
+      "metric": "torso_lean",
+      "op": ">",
+      "value": 60,
+      "cue": "Lie flat on your back with legs straight"
+    },
+    "rep": {
+      "metric": "hip",
+      "direction": "decrease",
+      "start_threshold": 160,
+      "peak_threshold": 105
+    },
+    "faults": [
+      {
+        "id": "bent_knees",
+        "label": "Knees bending",
+        "when": "active",
+        "metric": "knee",
+        "op": "<",
+        "warn": 150,
+        "bad": 130,
+        "cue": "Keep your legs straight as you lift"
+      },
+      {
+        "id": "low_raise",
+        "label": "Legs not high enough",
+        "when": "rep",
+        "metric": "hip",
+        "agg": "min",
+        "op": ">",
+        "warn": 95,
+        "cue": "Lift your legs higher — toward vertical",
+        "bad": 120
+      }
+    ],
+    "correction_tips": [
+      "Keep your legs straight",
+      "Press your lower back into the floor",
+      "Lift toward vertical",
+      "Lower slowly"
+    ],
+    "voice_intro": "Leg raises. Straight legs, lift toward the ceiling, lower slowly.",
+    "voice_encouragement": [
+      "Great control!",
+      "Legs long, perfect!",
+      "Strong core!"
+    ]
   }
 }

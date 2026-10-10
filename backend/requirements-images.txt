@@ -1,0 +1,10 @@
+# Optional: offline generation of the exercise pose guides (scripts/generate_pose_guides.py).
+#   .venv/bin/pip install -r requirements-images.txt   (~2–3 GB, plus ~4 GB of models on first run)
+-r requirements.txt
+torch==2.14.0
+diffusers==0.40.0
+transformers==5.17.0
+accelerate==1.15.0
+safetensors==0.8.0
+pillow==12.3.0
+mediapipe==0.10.35

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import CoachingCue, User, WorkoutSession, utcnow
 from models import IssueCount, UserStats
+from services.exercises import get_exercise
 
 
 async def get_or_create_user(db: AsyncSession, user_id: str) -> User:
@@ -95,6 +96,11 @@ async def list_sessions(db: AsyncSession, user_id: str, limit: int = 50) -> list
 
 async def user_stats(db: AsyncSession, user_id: str) -> UserStats:
     sessions = await list_sessions(db, user_id, limit=10_000)
+
+    def is_hold(s: WorkoutSession) -> bool:
+        ex = get_exercise(s.exercise_id)
+        return bool(ex and ex.get("mode") == "hold")
+
     scored = [s.avg_score for s in sessions if s.avg_score is not None]
 
     issue_rows = await db.execute(
@@ -109,7 +115,9 @@ async def user_stats(db: AsyncSession, user_id: str) -> UserStats:
     return UserStats(
         user_id=user_id,
         total_sessions=len(sessions),
-        total_reps=sum(s.reps for s in sessions),
+        total_reps=sum(s.reps for s in sessions if not is_hold(s)),
+        # Hold exercises store seconds held in the reps column.
+        total_hold_sec=sum(s.reps for s in sessions if is_hold(s)),
         total_duration_sec=sum(s.duration_sec for s in sessions),
         avg_score=sum(scored) / len(scored) if scored else None,
         by_exercise=dict(Counter(s.exercise_id for s in sessions)),

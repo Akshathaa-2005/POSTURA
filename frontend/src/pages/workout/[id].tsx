@@ -45,7 +45,8 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-slate/10 pb-5">
         <div>
           <p className="eyebrow">
-            {exercise.category}&nbsp;&nbsp;·&nbsp;&nbsp;{exercise.difficulty}&nbsp;&nbsp;·&nbsp;&nbsp;{exercise.rep_target} reps
+            {exercise.category}&nbsp;&nbsp;·&nbsp;&nbsp;{exercise.difficulty}&nbsp;&nbsp;·&nbsp;&nbsp;
+            {exercise.mode === "hold" ? `${exercise.hold_target_sec} s hold` : `${exercise.rep_target} reps`}
           </p>
           <h1 className="mt-2 font-display text-5xl font-normal tracking-tight text-slate sm:text-6xl">{exercise.name}</h1>
         </div>
@@ -77,7 +78,7 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
           onCoachIssue={sendIssue}
           onPraise={sendPraise}
         />
-        <DashboardPanel exercise={exercise} />
+        <DashboardPanel exercise={exercise} mirrored={mirrored} />
       </div>
     </Layout>
   );

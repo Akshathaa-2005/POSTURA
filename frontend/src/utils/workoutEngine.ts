@@ -44,8 +44,16 @@ const REP_ISSUE_MS = 5000;
 const REP_HIGHLIGHT_MS = 1500;
 /** Switch the tracked side (side view) only when the other side is clearly more visible. */
 const SIDE_SWITCH_MARGIN = 0.08;
-/** Praise every Nth consecutive clean rep. */
+/** A major live fault held this many frames during a rep means the rep doesn't count. */
+const REP_BAD_FRAMES = 3;
+/** A rep doesn't count if the body was out of frame (or out of position) for more than this share of it. */
+const MAX_LOST_FRACTION = 0.3;
+/** Praise every Nth consecutive clean rep… */
 const PRAISE_EVERY = 3;
+/** …or every this-many seconds of a clean hold. */
+const HOLD_PRAISE_MS = 10_000;
+/** Longest gap between frames counted towards a hold (e.g. a dropped frame, not a pause). */
+const MAX_FRAME_GAP_MS = 250;
 
 export interface EngineSnapshot {
   landmarks: Landmark[] | null;
@@ -59,6 +67,8 @@ export interface EngineSnapshot {
   breakdown: ScoreBreakdown;
   averageScore: number | null;
   reps: number;
+  /** Hold exercises: time held in position without a major fault. */
+  holdMs: number;
   phase: RepPhase;
   repEvent: RepEvent | null;
   /** The cue currently shown to the user. */
@@ -75,7 +85,8 @@ const ema = (prev: number | undefined, next: number, alpha: number) =>
 const severityRank = (s: JointStatus) => (s === "bad" ? 2 : s === "warn" ? 1 : 0);
 
 export class WorkoutEngine {
-  private readonly counter: RepCounter;
+  private readonly hold: boolean;
+  private readonly counter: RepCounter | null;
   private readonly liveRules: FaultRule[];
   private readonly repRules: FaultRule[];
   private readonly regions: Set<BodyRegion>;
@@ -93,6 +104,9 @@ export class WorkoutEngine {
 
   /** Per-rep min/max of each rep-rule metric, keyed `${metric}:${side}`. */
   private repAgg = new Map<string, { min: number; max: number; side: Side | null }>();
+  private repLiveBad = new Map<string, { hit: FaultHit; frames: number }>();
+  private repFrames = 0;
+  private repLostFrames = 0;
   private repHits: FaultHit[] = [];
   private repHitsAt = -Infinity;
   private cleanStreak = 0;
@@ -102,15 +116,25 @@ export class WorkoutEngine {
   private setupFailSince: number | null = null;
   private lastIssueKey: string | null = null;
 
+  private holdMs = 0;
+  private lastFrameAt: number | null = null;
+  private nextHoldPraiseMs = HOLD_PRAISE_MS;
+
   constructor(private readonly exercise: Exercise) {
-    this.counter = new RepCounter(exercise.rep);
+    this.hold = exercise.mode === "hold";
+    if (this.hold && !exercise.setup) throw new Error(`Hold exercise ${exercise.id} needs a setup rule`);
+    if (!this.hold && !exercise.rep) throw new Error(`Rep exercise ${exercise.id} needs a rep config`);
+    this.counter = exercise.rep && !this.hold ? new RepCounter(exercise.rep) : null;
     this.liveRules = exercise.faults.filter((f) => f.when !== "rep");
     this.repRules = exercise.faults.filter((f) => f.when === "rep");
     this.regions = new Set(exercise.faults.map((f) => METRIC_REGION[f.metric]));
   }
 
   process(raw: Landmark[] | null, width: number, height: number, now: number): EngineSnapshot {
+    const dt = this.lastFrameAt === null ? 0 : Math.min(MAX_FRAME_GAP_MS, now - this.lastFrameAt);
+    this.lastFrameAt = now;
     if (!raw) {
+      if (this.counter && this.counter.phase !== "start") this.repLostFrames += 1;
       this.smoothed = null;
       this.setupFailSince = null;
       return this.snapshot({ landmarks: null, angles: {}, inFrame: false, setupOk: true, jointStatus: new Map() });
@@ -139,25 +163,30 @@ export class WorkoutEngine {
     const metrics = this.smoothMetrics(computeMetrics(lm, width, height, angles, sides));
     const setupOk = setupSatisfied(this.exercise.setup, metrics);
 
-    // 3. Reps (only once the starting position is held).
-    const repValues = metricValues(metrics, this.exercise.rep.metric);
+    // 3. Reps (only once the starting position is held). Holds are "in frame" when their position is measurable.
+    const trackedMetric = this.counter ? this.exercise.rep!.metric : this.exercise.setup!.metric;
+    const repValues = metricValues(metrics, trackedMetric);
     const inFrame = repValues.length > 0;
     let repEvent: RepEvent | null = null;
-    if (inFrame && setupOk) {
+    if (this.counter && inFrame && setupOk) {
       const count = this.counter.update(repValues.reduce((s, v) => s + v.value, 0) / repValues.length, now);
-      if (this.counter.phase !== "start") this.aggregateRep(metrics);
+      if (this.counter.phase !== "start") {
+        this.aggregateRep(metrics);
+        this.repFrames += 1;
+      }
       if (count) {
-        repEvent = { ...count, faults: this.evaluateRep() };
+        repEvent = this.judgeRep(count);
         this.onRep(repEvent, now);
       } else if (this.counter.phase === "start") {
-        this.repAgg.clear();
+        this.resetRep();
       }
-    } else {
-      this.repAgg.clear();
+    } else if (this.counter && this.counter.phase !== "start") {
+      // Keep what was measured so far; leaving the frame mid-rep must not wipe the evidence.
+      this.repLostFrames += 1;
     }
 
-    // 4. Live posture faults.
-    const phase = this.counter.phase;
+    // 4. Live posture faults. While holding a position, "active" and "peak" rules apply.
+    const phase: RepPhase = this.counter ? this.counter.phase : setupOk ? "peak" : "start";
     const liveHits: FaultHit[] = [];
     if (inFrame && setupOk) {
       for (const rule of this.liveRules) {
@@ -168,6 +197,23 @@ export class WorkoutEngine {
       }
     }
     const confirmedLive = this.trackLive(liveHits, now);
+    if (this.counter && this.counter.phase !== "start") {
+      for (const hit of liveHits) {
+        if (hit.status !== "bad") continue;
+        const seen = this.repLiveBad.get(hit.rule.id);
+        this.repLiveBad.set(hit.rule.id, { hit, frames: (seen?.frames ?? 0) + 1 });
+      }
+    }
+
+    // Holds: time only counts while in position without a major fault.
+    let holdPraise = false;
+    if (this.hold && inFrame && setupOk && !confirmedLive.some((h) => h.status === "bad")) {
+      this.holdMs += dt;
+      if (this.holdMs >= this.nextHoldPraiseMs) {
+        this.nextHoldPraiseMs += HOLD_PRAISE_MS;
+        holdPraise = confirmedLive.length === 0;
+      }
+    }
 
     // 5. Score.
     if (inFrame && setupOk) {
@@ -189,12 +235,13 @@ export class WorkoutEngine {
     // 6. Pick the cue to show, and whether it's new enough to speak.
     const issue = this.chooseIssue(confirmedLive, setupOk, inFrame, now);
     let coachIssue: FormIssue | null = null;
-    const key = issue ? `${issue.id}:${issue.fromRep ? this.counter.reps + this.repHitsAt : "live"}` : null;
+    const key = issue ? `${issue.id}:${issue.fromRep ? this.repHitsAt : "live"}` : null;
     if (issue && key !== this.lastIssueKey) coachIssue = issue;
     this.lastIssueKey = key;
 
     const praise =
-      !!repEvent && repEvent.type === "rep" && repEvent.faults.length === 0 && this.cleanStreak % PRAISE_EVERY === 0;
+      holdPraise ||
+      (!!repEvent && repEvent.type === "rep" && repEvent.faults.length === 0 && this.cleanStreak % PRAISE_EVERY === 0);
 
     return this.snapshot({
       landmarks: lm,
@@ -248,6 +295,30 @@ export class WorkoutEngine {
         }
       }
     }
+  }
+
+  /** A rep counts only if it reached the target, had no major fault, and stayed in view. */
+  private judgeRep(count: Omit<RepEvent, "faults">): RepEvent {
+    const faults = this.evaluateRep();
+    for (const [id, { hit, frames }] of this.repLiveBad) {
+      if (frames >= REP_BAD_FRAMES && !faults.some((f) => f.rule.id === id)) faults.push(hit);
+    }
+    faults.sort((a, b) => severityRank(b.status) - severityRank(a.status));
+    const lost = this.repLostFrames > (this.repFrames + this.repLostFrames) * MAX_LOST_FRACTION;
+    this.resetRep();
+
+    if (count.type !== "rep") return { ...count, faults };
+    if (faults.some((f) => f.status === "bad")) return { ...count, type: "partial", faults };
+    if (lost) return { ...count, type: "partial", faults, note: "Stay fully in frame for the whole rep" };
+    this.counter!.commit();
+    return { ...count, faults };
+  }
+
+  private resetRep() {
+    this.repAgg.clear();
+    this.repLiveBad.clear();
+    this.repFrames = 0;
+    this.repLostFrames = 0;
   }
 
   private evaluateRep(): FaultHit[] {
@@ -332,7 +403,7 @@ export class WorkoutEngine {
       }
     };
     for (const rule of this.exercise.faults) mark(metricLandmarks(rule.metric, sides), "good");
-    mark(metricLandmarks(this.exercise.rep.metric, sides), "good");
+    if (this.exercise.rep) mark(metricLandmarks(this.exercise.rep.metric, sides), "good");
     const recentRep = now - this.repHitsAt < REP_HIGHLIGHT_MS ? this.repHits : [];
     for (const hit of [...liveHits, ...recentRep]) {
       mark(metricLandmarks(hit.rule.metric, hit.sides.length ? hit.sides : sides), hit.status);
@@ -353,8 +424,9 @@ export class WorkoutEngine {
       score: this.score,
       breakdown: { ...this.breakdown },
       averageScore: this.scoreFrames ? this.scoreSum / this.scoreFrames : null,
-      reps: this.counter.reps,
-      phase: this.counter.phase,
+      reps: this.counter?.reps ?? 0,
+      holdMs: this.holdMs,
+      phase: this.counter?.phase ?? "start",
     };
   }
 }

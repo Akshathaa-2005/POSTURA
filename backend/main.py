@@ -1,7 +1,8 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, Request, WebSocket
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -16,6 +17,7 @@ from websocket_handler import workout_websocket
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 settings = get_settings()
 settings.audio_dir.mkdir(parents=True, exist_ok=True)
+log = logging.getLogger("main")
 
 
 @asynccontextmanager
@@ -37,6 +39,13 @@ app.include_router(exercises.router)
 app.include_router(workouts.router)
 app.include_router(analytics.router)
 app.mount("/audio", StaticFiles(directory=settings.audio_dir), name="audio")
+
+
+@app.exception_handler(Exception)
+async def unhandled_error(request: Request, exc: Exception):
+    # Log the details server-side; never leak internals to the client.
+    log.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 @app.get("/api/health")

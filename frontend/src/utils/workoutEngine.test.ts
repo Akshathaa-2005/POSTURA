@@ -60,7 +60,22 @@ function plankPose({ elbow = 175, sag = 0 } = {}) {
 }
 
 /** Front-facing figure; `left`/`right` are shoulder abduction angles (0 = arms down, 180 = overhead). */
-function frontPose({ left = 10, right = 10, stance = 0.6 }) {
+function frontPose({
+  left = 10,
+  right = 10,
+  stance = 0.6,
+  leftKneeY = 750,
+  hipY = 600,
+  kneeSpread,
+}: {
+  left?: number;
+  right?: number;
+  stance?: number;
+  leftKneeY?: number;
+  hipY?: number;
+  /** Absolute knee x offset from centre (overrides the default, which follows the stance). */
+  kneeSpread?: number;
+}) {
   const LS: P = [550, 300]; // person's left appears on image right when facing the camera
   const RS: P = [450, 300];
   const arm = (S: P, a: number, out: 1 | -1): [P, P] => {
@@ -74,8 +89,8 @@ function frontPose({ left = 10, right = 10, stance = 0.6 }) {
   return landmarks({
     0: [500, 230],
     11: LS, 12: RS, 13: LE, 14: RE, 15: LW, 16: RW,
-    23: [530, 600], 24: [470, 600],
-    25: [500 + half * 0.8 + 20, 750], 26: [500 - half * 0.8 - 20, 750],
+    23: [530, hipY], 24: [470, hipY],
+    25: [500 + (kneeSpread ?? half * 0.8 + 20), leftKneeY], 26: [500 - (kneeSpread ?? half * 0.8 + 20), 750],
     27: [500 + half, 900], 28: [500 - half, 900],
   });
 }
@@ -135,7 +150,7 @@ describe("squat (side view)", () => {
   });
 
   it("coaches depth on a shallow rep that still counts", () => {
-    const r = run(new WorkoutEngine(squat), [sidePose(), sidePose({ knee: 106 }), sidePose()]);
+    const r = run(new WorkoutEngine(squat), [sidePose(), sidePose({ knee: 96 }), sidePose()]);
     expect(r.reps).toHaveLength(1);
     expect(r.reps[0].type).toBe("rep");
     expect(r.reps[0].faults[0].rule.id).toBe("shallow_squat");
@@ -197,7 +212,7 @@ describe("push-up (side view)", () => {
   });
 
   it("counts full push-ups and coaches shallow ones", () => {
-    const r = run(new WorkoutEngine(pushUp), [plankPose(), plankPose({ elbow: 85 }), plankPose(), plankPose({ elbow: 105 }), plankPose()]);
+    const r = run(new WorkoutEngine(pushUp), [plankPose(), plankPose({ elbow: 85 }), plankPose(), plankPose({ elbow: 95 }), plankPose()]);
     expect(r.reps.map((e) => [e.type, e.faults.map((f) => f.rule.id)])).toEqual([
       ["rep", []],
       ["rep", ["shallow_push_up"]],
@@ -239,12 +254,130 @@ describe("bicep curl (side view)", () => {
       sidePose({ elbow: 165 }),
       sidePose({ elbow: 40 }),
       sidePose({ elbow: 165 }),
-      sidePose({ elbow: 68 }),
+      sidePose({ elbow: 55 }),
       sidePose({ elbow: 165 }),
     ]);
     expect(r.reps.map((e) => [e.type, e.faults.map((f) => f.rule.id)])).toEqual([
       ["rep", []],
       ["rep", ["partial_curl"]],
     ]);
+  });
+});
+
+describe("holds", () => {
+  const plank = getExercise("plank")!;
+  const secs = (r: Run) => last(r).holdMs / 1000;
+
+  it("times a clean plank and doesn't count reps", () => {
+    const r = run(new WorkoutEngine(plank), [plankPose()], { hold: 92 }); // ~3 s
+    expect(secs(r)).toBeGreaterThan(2.8);
+    expect(secs(r)).toBeLessThan(3.2);
+    expect(last(r).reps).toBe(0);
+  });
+
+  it("stops the clock while the hips sag badly", () => {
+    const r = run(new WorkoutEngine(plank), [plankPose({ sag: 90 })], { hold: 92 });
+    expect(secs(r)).toBeLessThan(0.6); // only the confirmation window before the fault is recognised
+    expect(last(r).issue).toMatchObject({ id: "hips_sagging", status: "bad" });
+  });
+
+  it("doesn't start the clock until the plank position is held", () => {
+    const r = run(new WorkoutEngine(plank), [sidePose()], { hold: 92 });
+    expect(secs(r)).toBe(0);
+    expect(last(r).issue).toMatchObject({ id: "setup" });
+  });
+
+  it("praises every 10 s of clean holding", () => {
+    const r = run(new WorkoutEngine(plank), [plankPose()], { hold: 640 }); // ~21 s
+    expect(r.praise).toBe(2);
+  });
+
+  it("coaches a wall sit that is too high, but keeps timing it", () => {
+    const wallSit = getExercise("wall_sit")!;
+    const r = run(new WorkoutEngine(wallSit), [sidePose({ knee: 110, lean: 5 })], { hold: 60 });
+    expect(last(r).issue).toMatchObject({ id: "too_high", status: "warn" });
+    expect(secs(r)).toBeGreaterThan(1.5);
+  });
+});
+
+describe("new metrics", () => {
+  it("counts high knees and coaches low ones", () => {
+    const hk = getExercise("high_knees")!;
+    const r = run(new WorkoutEngine(hk), [
+      frontPose({}),
+      frontPose({ leftKneeY: 605 }), // knee at hip height
+      frontPose({}),
+      frontPose({ leftKneeY: 635 }), // counted, but low
+      frontPose({}),
+    ]);
+    expect(r.reps.map((e) => [e.type, e.faults.map((f) => f.rule.id)])).toEqual([
+      ["rep", []],
+      ["rep", ["low_knees"]],
+    ]);
+  });
+
+  it("catches knees caving in a sumo squat", () => {
+    const sumo = getExercise("sumo_squat")!;
+    const stand = frontPose({ stance: 1.8, kneeSpread: 75 });
+    const good = run(new WorkoutEngine(sumo), [stand, frontPose({ stance: 1.8, hipY: 720, kneeSpread: 120 }), stand]);
+    expect(good.reps.map((e) => e.type)).toEqual(["rep"]);
+    expect(good.coached.map((i) => i.id)).not.toContain("knees_caving");
+
+    const caving = run(new WorkoutEngine(sumo), [stand, frontPose({ stance: 1.8, hipY: 700, kneeSpread: 20 })], { hold: 30 });
+    expect(caving.coached.map((i) => i.id)).toContain("knees_caving");
+  });
+});
+
+describe("reps only count with acceptable form", () => {
+  const squat = getExercise("squat")!;
+
+  it("doesn't count a quarter squat", () => {
+    const r = run(new WorkoutEngine(squat), [sidePose(), sidePose({ knee: 112 }), sidePose()]);
+    expect(last(r).reps).toBe(0);
+    expect(r.reps[0]).toMatchObject({ type: "partial" });
+    expect(r.reps[0].faults[0]).toMatchObject({ status: "bad", rule: { id: "shallow_squat" } });
+  });
+
+  it("doesn't count a deep push-up done with sagging hips", () => {
+    const r = run(new WorkoutEngine(getExercise("push_up")!), [
+      plankPose({ sag: 90 }),
+      plankPose({ elbow: 85, sag: 90 }),
+      plankPose({ sag: 90 }),
+    ]);
+    expect(last(r).reps).toBe(0);
+    expect(r.reps[0].type).toBe("partial");
+    expect(r.reps[0].faults.map((f) => f.rule.id)).toContain("hips_sagging");
+  });
+
+  it("doesn't count a full curl when the elbow swings forward", () => {
+    const r = run(new WorkoutEngine(getExercise("bicep_curl")!), [
+      sidePose({ elbow: 165 }),
+      sidePose({ elbow: 40, shoulder: 60 }),
+      sidePose({ elbow: 165 }),
+    ]);
+    expect(last(r).reps).toBe(0);
+    expect(r.reps[0].faults[0].rule.id).toBe("elbow_drift");
+  });
+
+  it("doesn't count a rep when the body leaves the frame for most of it", () => {
+    const engine = new WorkoutEngine(squat);
+    let now = 0;
+    const feed = (lm: Landmark[] | null, n: number) => {
+      let s: EngineSnapshot | null = null;
+      for (let i = 0; i < n; i++, now += FRAME_MS) s = engine.process(lm, W, H, now);
+      return s!;
+    };
+    feed(sidePose(), 8);
+    feed(sidePose({ knee: 140 }), 3);
+    feed(null, 20);
+    feed(sidePose({ knee: 85, lean: 30 }), 3);
+    const end = feed(sidePose(), 8);
+    expect(end.reps).toBe(0);
+  });
+
+  it("still counts a good squat with a minor depth cue", () => {
+    const r = run(new WorkoutEngine(squat), [sidePose(), sidePose({ knee: 96 }), sidePose()]);
+    expect(last(r).reps).toBe(1);
+    expect(r.reps[0].faults[0]).toMatchObject({ status: "warn" });
   });
 });

@@ -4,7 +4,7 @@ import type { Exercise, FormIssue, RepEvent } from "@/types";
 import { usePoseDetection, type PoseResultsHandler } from "@/hooks/usePoseDetection";
 import { useWorkoutState } from "@/hooks/useWorkoutState";
 import { WorkoutEngine } from "@/utils/workoutEngine";
-import PoseFigure from "./PoseFigure";
+import { PoseGuideFrames } from "./PoseGuide";
 import PoseSkeleton, { type SkeletonFrame } from "./PoseSkeleton";
 
 interface Props {
@@ -78,7 +78,7 @@ export default function VideoPoseContainer({
       lastFrameAt.current = now;
 
       if (now - lastPush.current >= UI_UPDATE_MS || pendingEvent.current) {
-        applySnapshot(snap, { fps, dtMs: unpushedMs.current, event: pendingEvent.current });
+        applySnapshot(snap, { fps, dtMs: unpushedMs.current, event: pendingEvent.current, aspect: width / height });
         lastPush.current = now;
         unpushedMs.current = 0;
         pendingEvent.current = null;
@@ -128,14 +128,12 @@ export default function VideoPoseContainer({
         {/* Status overlays */}
         {status === "idle" && (
           <Overlay>
-            <div className="grid w-full max-w-3xl items-center gap-6 sm:grid-cols-[1fr_1.2fr]">
-              <div className="mx-auto aspect-[3/4] w-32 rounded-[14px] bg-mist sm:w-full sm:max-w-[220px]">
-                <PoseFigure exerciseId={exercise.id} className="h-full w-full p-4" />
-              </div>
+            <div className="grid w-full max-w-3xl items-center gap-6 sm:grid-cols-[1.2fr_1fr]">
+              <PoseGuideFrames exerciseId={exercise.id} className="mx-auto w-full max-w-[220px] sm:max-w-[360px]" />
               <div className="text-center sm:text-left">
                 <p className="eyebrow">Camera setup</p>
                 <p className="mt-3 font-display text-2xl leading-snug text-slate sm:text-3xl">{exercise.camera_setup}.</p>
-                <p className="mt-2 text-sm font-light text-stone">Follow the figure’s rhythm once you’re in frame.</p>
+                <p className="mt-2 text-sm font-light text-stone">Match these positions once you’re in frame.</p>
                 <button
                   onClick={onStart}
                   className="mt-6 rounded-full bg-slate px-8 py-3 text-sm font-medium tracking-wide text-linen transition hover:bg-ink active:scale-95"
@@ -202,7 +200,7 @@ export default function VideoPoseContainer({
                 </span>
               ) : (
                 <span className="whitespace-nowrap rounded-full bg-linen/90 px-5 py-2 text-sm text-warn shadow-soft backdrop-blur">
-                  Partial rep · {lastEvent.faults[0]?.rule.label ?? "go through the full range"}
+                  Not counted · {lastEvent.faults[0]?.rule.label ?? lastEvent.note ?? "go through the full range"}
                 </span>
               )}
             </motion.div>

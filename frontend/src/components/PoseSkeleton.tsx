@@ -18,7 +18,7 @@ interface Props {
   showAngles: boolean;
 }
 
-const CONNECTIONS: [number, number][] = [
+export const CONNECTIONS: [number, number][] = [
   [11, 12], [11, 23], [12, 24], [23, 24], // torso
   [11, 13], [13, 15], [12, 14], [14, 16], // arms
   [15, 17], [15, 19], [17, 19], [16, 18], [16, 20], [18, 20], // hands

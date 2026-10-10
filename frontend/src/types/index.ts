@@ -21,7 +21,14 @@ export type JointAngles = Partial<Record<JointName, number>>;
  * Sided metrics are evaluated per body side (front view: both; side view: the side facing the camera).
  */
 export type SidedMetric = JointType | "hands_overhead";
-export type GlobalMetric = "torso_lean" | "hip_sag" | "stance_width" | "knee_min";
+export type GlobalMetric =
+  | "torso_lean"
+  | "hip_sag"
+  | "stance_width"
+  | "knee_min"
+  | "knee_max"
+  | "knee_track"
+  | "knee_lift_max";
 export type MetricName = SidedMetric | GlobalMetric;
 
 export interface RepConfig {
@@ -60,16 +67,21 @@ export interface SetupRule {
 export interface Exercise {
   id: string;
   name: string;
-  category: "cardio" | "strength" | "mobility";
+  category: "cardio" | "strength" | "core" | "mobility";
   difficulty: "beginner" | "intermediate" | "advanced";
   duration_sec: number;
   rep_target: number;
   description: string;
   camera_setup: string;
   view: "front" | "side";
-  /** Starting position that must hold before reps and faults are evaluated. */
+  /** "reps" counts repetitions; "hold" times how long the setup position is held with good form. */
+  mode?: "reps" | "hold";
+  /** Hold exercises: target seconds. */
+  hold_target_sec?: number;
+  /** Starting position that must hold before reps and faults are evaluated (required for holds). */
   setup?: SetupRule;
-  rep: RepConfig;
+  /** Rep exercises only. */
+  rep?: RepConfig;
   faults: FaultRule[];
   correction_tips: string[];
   voice_intro: string;
@@ -107,12 +119,15 @@ export interface FormIssue {
 export type RepPhase = "start" | "moving" | "peak";
 
 export interface RepEvent {
+  /** "partial" = not counted: the rep fell short or had a major fault. */
   type: "rep" | "partial";
   /** Range of motion achieved, 0-100. */
   rom: number;
   at: number;
-  /** Rep-level faults found in this rep (empty = a clean rep). */
+  /** Faults found in this rep, major first (empty = a clean rep). */
   faults: FaultHit[];
+  /** Why a rep wasn't counted when no fault explains it. */
+  note?: string;
 }
 
 export type DetectionStatus =

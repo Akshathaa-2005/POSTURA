@@ -41,6 +41,28 @@ const sidePose = (o: { head: P; S: P; E: P; W: P; H: P; lK: P; rK: P; lA: P; rA:
   lA: o.lA, rA: o.rA,
 });
 
+/** Lying on the back, head to the left (floor exercises). */
+const supine = (o: Partial<FigurePose> = {}): FigurePose => ({
+  head: [14, 98],
+  lS: [24, 101], rS: [24, 101],
+  lE: [36, 104], rE: [36, 104],
+  lW: [48, 105], rW: [48, 105],
+  lH: [52, 102], rH: [52, 102],
+  lK: [68, 84], rK: [68, 84],
+  lA: [82, 106], rA: [82, 106],
+  ...o,
+});
+
+const pushUpTop = sidePose({
+  head: [85, 75], S: [76, 81], E: [76, 94], W: [76, 107], H: [46, 91],
+  lK: [31, 97], rK: [31, 97], lA: [16, 105], rA: [16, 105],
+});
+
+const hinged = sidePose({
+  head: [76, 38], S: [66, 44], E: [66, 58], W: [66, 72], H: [40, 62],
+  lK: [46, 84], rK: [46, 84], lA: [48, 106], rA: [48, 106],
+});
+
 /** [start, peak] keyframes per exercise id. */
 export const FIGURE_POSES: Record<string, [FigurePose, FigurePose]> = {
   jumping_jack: [
@@ -78,11 +100,72 @@ export const FIGURE_POSES: Record<string, [FigurePose, FigurePose]> = {
     }),
   ],
   bicep_curl: [
-    side,
-    { ...side, lW: [62, 33], rW: [62, 33] }, // elbow stays pinned, forearm curls up
+    { ...side, lE: [54, 45], rE: [54, 45], lW: [56, 61], rW: [56, 61] },
+    { ...side, lE: [54, 45], rE: [54, 45], lW: [65, 32], rW: [65, 32] }, // elbow stays pinned, forearm curls up
   ],
   shoulder_press: [
-    { ...side, lE: [57, 38], rE: [57, 38], lW: [55, 22], rW: [55, 22] }, // hands at shoulder height
+    { ...side, lE: [60, 32], rE: [60, 32], lW: [60, 18], rW: [60, 18] }, // dumbbells at shoulder height, forearms vertical
     { ...side, lE: [58, 13], rE: [58, 13], lW: [60, -3], rW: [60, -3] }, // locked out, arms by the ears
+  ],
+  high_knees: [
+    { ...front, lE: [36, 44], lW: [40, 34], rE: [64, 46], rW: [66, 60] },
+    { ...front, lK: [46, 64], lA: [45, 84], lE: [36, 46], lW: [34, 60], rE: [64, 44], rW: [60, 34] },
+  ],
+  glute_bridge: [supine(), supine({ head: [16, 98], lS: [26, 100], rS: [26, 100], lH: [54, 82], rH: [54, 82], lK: [72, 78], rK: [72, 78] })],
+  plank: [pushUpTop, { ...pushUpTop, lH: [46, 90], rH: [46, 90], head: [85, 74] }],
+  wall_sit: [
+    sidePose({ head: [40, 34], S: [40, 48], E: [45, 62], W: [52, 72], H: [40, 78], lK: [62, 78], rK: [62, 78], lA: [62, 106], rA: [62, 106] }),
+    sidePose({ head: [40, 33], S: [40, 47], E: [45, 61], W: [52, 71], H: [40, 78], lK: [62, 78], rK: [62, 78], lA: [62, 106], rA: [62, 106] }),
+  ],
+  side_plank: [
+    {
+      head: [84, 62], lS: [76, 70], rS: [76, 70], lE: [76, 88], lW: [76, 106], rE: [76, 52], rW: [76, 36],
+      lH: [48, 84], rH: [48, 84], lK: [32, 94], rK: [32, 94], lA: [16, 104], rA: [16, 104],
+    },
+    {
+      head: [84, 61], lS: [76, 69], rS: [76, 69], lE: [76, 88], lW: [76, 106], rE: [76, 51], rW: [76, 35],
+      lH: [48, 82], rH: [48, 82], lK: [32, 93], rK: [32, 93], lA: [16, 104], rA: [16, 104],
+    },
+  ],
+  sumo_squat: [
+    { ...front, lK: [40, 84], rK: [60, 84], lA: [36, 106], rA: [64, 106], lE: [42, 46], rE: [58, 46], lW: [47, 56], rW: [53, 56] },
+    {
+      head: [50, 32], lS: [40, 46], rS: [60, 46], lE: [42, 62], rE: [58, 62], lW: [48, 56], rW: [52, 56],
+      lH: [44, 80], rH: [56, 80], lK: [32, 88], rK: [68, 88], lA: [36, 106], rA: [64, 106],
+    },
+  ],
+  lateral_raise: [front, { ...front, lE: [24, 31], rE: [76, 31], lW: [10, 30], rW: [90, 30] }],
+  front_raise: [side, { ...side, lE: [66, 30], rE: [66, 30], lW: [82, 30], rW: [82, 30] }],
+  overhead_tricep_extension: [
+    { ...side, lE: [53, 11], rE: [53, 11], lW: [41, 20], rW: [41, 20] },
+    { ...side, lE: [53, 11], rE: [53, 11], lW: [55, -5], rW: [55, -5] },
+  ],
+  hip_hinge: [side, hinged],
+  reverse_lunge: [
+    side,
+    sidePose({
+      head: [52, 30], S: [52, 44], E: [53, 60], W: [54, 75], H: [52, 77],
+      lK: [66, 80], rK: [42, 102], lA: [66, 106], rA: [26, 104],
+    }),
+  ],
+  knee_push_up: [
+    sidePose({ head: [85, 75], S: [76, 81], E: [76, 94], W: [76, 107], H: [50, 92], lK: [32, 106], rK: [32, 106], lA: [18, 96], rA: [18, 96] }),
+    sidePose({ head: [84, 93], S: [74, 98], E: [63, 94], W: [76, 107], H: [49, 101], lK: [32, 106], rK: [32, 106], lA: [18, 96], rA: [18, 96] }),
+  ],
+  side_lunge: [
+    { ...front, lK: [42, 84], rK: [58, 84], lA: [40, 106], rA: [60, 106] },
+    {
+      head: [44, 30], lS: [36, 44], rS: [54, 44], lE: [36, 58], rE: [54, 58], lW: [40, 70], rW: [52, 70],
+      lH: [38, 74], rH: [50, 74], lK: [28, 88], rK: [62, 90], lA: [28, 106], rA: [74, 106],
+    },
+  ],
+  bent_over_row: [hinged, { ...hinged, lE: [54, 48], rE: [54, 48], lW: [60, 60], rW: [60, 60] }],
+  sit_up: [
+    supine({ lE: [32, 96], rE: [32, 96], lW: [28, 94], rW: [28, 94] }),
+    supine({ head: [48, 58], lS: [44, 72], rS: [44, 72], lE: [50, 82], rE: [50, 82], lW: [46, 76], rW: [46, 76] }),
+  ],
+  leg_raise: [
+    supine({ lK: [72, 102], rK: [72, 102], lA: [92, 103], rA: [92, 103] }),
+    supine({ lK: [62, 84], rK: [62, 84], lA: [70, 64], rA: [70, 64] }),
   ],
 };

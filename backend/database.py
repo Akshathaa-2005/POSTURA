@@ -38,6 +38,7 @@ class WorkoutSession(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     rep_target: Mapped[int] = mapped_column(Integer, default=0)
+    # Reps completed; for hold exercises (plank, wall sit…) the seconds held with good form.
     reps: Mapped[int] = mapped_column(Integer, default=0)
     partial_reps: Mapped[int] = mapped_column(Integer, default=0)
     avg_score: Mapped[float | None] = mapped_column(Float)

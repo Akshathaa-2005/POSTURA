@@ -1,0 +1,415 @@
+{
+ "squat": {
+  "peak": {
+   "src": "/guides/squat/peak.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 2.3,
+   "seed": 3530026883,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, bodyweight squat end position, side view, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "start": {
+   "src": "/guides/squat/start.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 1.9,
+   "seed": 3530026883,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, bodyweight squat starting position, side view, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "jumping_jack": {
+  "start": {
+   "src": "/guides/jumping_jack/start.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 4.8,
+   "seed": 3504221622,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, jumping jack starting position, facing camera, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "peak": {
+   "src": "/guides/jumping_jack/peak.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 1.6,
+   "seed": 3504221622,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, jumping jack end position, facing camera, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "push_up": {
+  "start": {
+   "src": "/guides/push_up/start.jpg",
+   "width": 1280,
+   "height": 1024,
+   "pose_error_deg": 4.3,
+   "seed": 262554582,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, push-up starting position, side view, full body, sage green tank top, black leggings, white sneakers, yoga mat, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "peak": {
+   "src": "/guides/push_up/peak.jpg",
+   "width": 1280,
+   "height": 1024,
+   "pose_error_deg": 3.6,
+   "seed": 262554588,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, push-up end position, side view, full body, chest hovering just above the floor, elbows bent, body straight, sage green tank top, black leggings, white sneakers, yoga mat, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "plank": {
+  "hold": {
+   "src": "/guides/plank/hold.jpg",
+   "width": 1280,
+   "height": 1024,
+   "pose_error_deg": 5.9,
+   "seed": 638255239,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, plank holding, side view, full body, sage green tank top, black leggings, white sneakers, yoga mat, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "lunge": {
+  "peak": {
+   "src": "/guides/lunge/peak.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 6.0,
+   "seed": 2469180258,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, forward lunge end position, side view, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "start": {
+   "src": "/guides/lunge/start.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 4.4,
+   "seed": 2469180269,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, forward lunge starting position, side view, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "bicep_curl": {
+  "start": {
+   "src": "/guides/bicep_curl/start.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 3.8,
+   "seed": 3531071064,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, bicep curl starting position, side view, full body, holding dumbbells, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "peak": {
+   "src": "/guides/bicep_curl/peak.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 2.9,
+   "seed": 3531071067,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, bicep curl end position, side view, full body, holding dumbbells, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "shoulder_press": {
+  "peak": {
+   "src": "/guides/shoulder_press/peak.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 5.1,
+   "seed": 2841674156,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, shoulder press end position, side view, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "start": {
+   "src": "/guides/shoulder_press/start.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 2.4,
+   "seed": 2841674158,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, shoulder press starting position, side view, full body, holding dumbbells, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "high_knees": {
+  "start": {
+   "src": "/guides/high_knees/start.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 2.2,
+   "seed": 3830741708,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, high knees starting position, facing camera, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "peak": {
+   "src": "/guides/high_knees/peak.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 7.0,
+   "seed": 3830741713,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, high knees end position, facing camera, full body, running in place, one knee raised high to hip height, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "glute_bridge": {
+  "start": {
+   "src": "/guides/glute_bridge/start.jpg",
+   "width": 1280,
+   "height": 1024,
+   "pose_error_deg": 9.7,
+   "seed": 1439826607,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, glute bridge starting position, side view, full body, sage green tank top, black leggings, white sneakers, yoga mat, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "peak": {
+   "src": "/guides/glute_bridge/peak.jpg",
+   "width": 1280,
+   "height": 1024,
+   "pose_error_deg": 6.8,
+   "seed": 1439826607,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, glute bridge end position, side view, full body, sage green tank top, black leggings, white sneakers, yoga mat, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "wall_sit": {
+  "hold": {
+   "src": "/guides/wall_sit/hold.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 4.5,
+   "seed": 3943496170,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, wall sit holding, side view, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "side_plank": {
+  "hold": {
+   "src": "/guides/side_plank/hold.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 9.2,
+   "seed": 2666193325,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, side plank holding, facing camera, full body, side plank on one forearm, hips lifted, body straight, sage green tank top, black leggings, white sneakers, yoga mat, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "sumo_squat": {
+  "start": {
+   "src": "/guides/sumo_squat/start.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 3.6,
+   "seed": 2605579181,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, sumo squat starting position, facing camera, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "peak": {
+   "src": "/guides/sumo_squat/peak.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 5.2,
+   "seed": 2605579181,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, sumo squat end position, facing camera, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "lateral_raise": {
+  "start": {
+   "src": "/guides/lateral_raise/start.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 2.2,
+   "seed": 1549881412,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, lateral raise starting position, facing camera, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "peak": {
+   "src": "/guides/lateral_raise/peak.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 3.6,
+   "seed": 1549881412,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, lateral raise end position, facing camera, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "front_raise": {
+  "start": {
+   "src": "/guides/front_raise/start.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 5.2,
+   "seed": 4233782864,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, front raise starting position, side view, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "peak": {
+   "src": "/guides/front_raise/peak.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 3.3,
+   "seed": 4233782864,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, front raise end position, side view, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "overhead_tricep_extension": {
+  "start": {
+   "src": "/guides/overhead_tricep_extension/start.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 14.9,
+   "seed": 2604504486,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, overhead tricep extension starting position, side view, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "peak": {
+   "src": "/guides/overhead_tricep_extension/peak.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 3.4,
+   "seed": 2604504486,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, overhead tricep extension end position, side view, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "hip_hinge": {
+  "start": {
+   "src": "/guides/hip_hinge/start.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 2.4,
+   "seed": 1709698067,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, hip hinge (good morning) starting position, side view, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "peak": {
+   "src": "/guides/hip_hinge/peak.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 5.8,
+   "seed": 1709698067,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, hip hinge (good morning) end position, side view, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "reverse_lunge": {
+  "start": {
+   "src": "/guides/reverse_lunge/start.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 2.7,
+   "seed": 3383108591,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, reverse lunge starting position, side view, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "peak": {
+   "src": "/guides/reverse_lunge/peak.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 8.9,
+   "seed": 3383108590,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, reverse lunge end position, side view, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "knee_push_up": {
+  "start": {
+   "src": "/guides/knee_push_up/start.jpg",
+   "width": 1280,
+   "height": 1024,
+   "pose_error_deg": 7.9,
+   "seed": 524404042,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, knee push-up starting position, side view, full body, sage green tank top, black leggings, white sneakers, yoga mat, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "peak": {
+   "src": "/guides/knee_push_up/peak.jpg",
+   "width": 1280,
+   "height": 1024,
+   "pose_error_deg": 12.7,
+   "seed": 524404046,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, knee push-up end position, side view, full body, on knees, chest hovering above the floor, elbows bent, sage green tank top, black leggings, white sneakers, yoga mat, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "side_lunge": {
+  "start": {
+   "src": "/guides/side_lunge/start.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 3.5,
+   "seed": 734876236,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, side lunge starting position, facing camera, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "peak": {
+   "src": "/guides/side_lunge/peak.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 5.0,
+   "seed": 734876236,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, side lunge end position, facing camera, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "bent_over_row": {
+  "start": {
+   "src": "/guides/bent_over_row/start.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 5.3,
+   "seed": 881225353,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, bent-over row starting position, side view, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "peak": {
+   "src": "/guides/bent_over_row/peak.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 2.9,
+   "seed": 881225353,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, bent-over row end position, side view, full body, sage green tank top, black leggings, white sneakers, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "sit_up": {
+  "start": {
+   "src": "/guides/sit_up/start.jpg",
+   "width": 1280,
+   "height": 1024,
+   "pose_error_deg": 4.7,
+   "seed": 698771771,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, sit-up starting position, side view, full body, sage green tank top, black leggings, white sneakers, yoga mat, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "peak": {
+   "src": "/guides/sit_up/peak.jpg",
+   "width": 1024,
+   "height": 1280,
+   "pose_error_deg": 5.7,
+   "seed": 698771770,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, sit-up end position, side view, full body, sage green tank top, black leggings, white sneakers, yoga mat, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ },
+ "leg_raise": {
+  "peak": {
+   "src": "/guides/leg_raise/peak.jpg",
+   "width": 1280,
+   "height": 1024,
+   "pose_error_deg": 3.7,
+   "seed": 165178380,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, lying leg raise end position, side view, full body, sage green tank top, black leggings, white sneakers, yoga mat, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  },
+  "start": {
+   "src": "/guides/leg_raise/start.jpg",
+   "width": 1280,
+   "height": 1024,
+   "pose_error_deg": 5.3,
+   "seed": 165178385,
+   "prompt": "photo of a fit athletic woman with dark hair in a ponytail, lying leg raise starting position, side view, full body, sage green tank top, black leggings, white sneakers, yoga mat, plain sage studio wall, soft light, sharp focus, realistic",
+   "model": "SG161222/Realistic_Vision_V5.1_noVAE + lllyasviel/control_v11p_sd15_openpose"
+  }
+ }
+}

@@ -144,9 +144,28 @@ export function computeMetrics(
     if (shoulders > 1) global.stance_width = Math.abs(px(LM.LEFT_ANKLE).x - px(LM.RIGHT_ANKLE).x) / shoulders;
   }
 
-  // Most-bent knee among visible legs (both legs matter in a lunge, whichever faces the camera).
+  // Most-bent / straightest knee among visible legs (both legs matter in a lunge, whichever faces the camera).
   const knees = [angles.left_knee, angles.right_knee].filter((a): a is number => a !== undefined);
-  if (knees.length) global.knee_min = Math.min(...knees);
+  if (knees.length) {
+    global.knee_min = Math.min(...knees);
+    global.knee_max = Math.max(...knees);
+  }
+
+  // Knee tracking (front view): knee spread ÷ ankle spread; < 1 means the knees cave inward.
+  if ([LM.LEFT_KNEE, LM.RIGHT_KNEE, LM.LEFT_ANKLE, LM.RIGHT_ANKLE].every(visible)) {
+    const ankles = Math.abs(px(LM.LEFT_ANKLE).x - px(LM.RIGHT_ANKLE).x);
+    if (ankles > 1) global.knee_track = Math.abs(px(LM.LEFT_KNEE).x - px(LM.RIGHT_KNEE).x) / ankles;
+  }
+
+  // Knee lift: the higher knee's height relative to its hip, in torso lengths (0 = hip height, − = below).
+  const lifts = (["left", "right"] as Side[])
+    .filter((sd) => [SIDE_LM[sd].shoulder, SIDE_LM[sd].hip, SIDE_LM[sd].knee].every(visible))
+    .map((sd) => {
+      const torso = dist(px(SIDE_LM[sd].shoulder), px(SIDE_LM[sd].hip));
+      return torso > 0 ? (px(SIDE_LM[sd].hip).y - px(SIDE_LM[sd].knee).y) / torso : undefined;
+    })
+    .filter((v): v is number => v !== undefined);
+  if (lifts.length) global.knee_lift_max = Math.max(...lifts);
 
   return { sided, global };
 }
@@ -210,6 +229,9 @@ export const METRIC_REGION: Record<MetricName, BodyRegion> = {
   hip_sag: "core",
   knee: "lower",
   knee_min: "lower",
+  knee_max: "lower",
+  knee_track: "lower",
+  knee_lift_max: "lower",
   stance_width: "lower",
 };
 
@@ -229,6 +251,9 @@ export function metricLandmarks(metric: MetricName, sides: Side[]): number[] {
     case "hands_overhead":
       return on((s) => s.wrist);
     case "knee_min":
+    case "knee_max":
+    case "knee_lift_max":
+    case "knee_track":
       return on((s) => s.knee, both);
     case "torso_lean":
       return [...on((s) => s.shoulder), ...on((s) => s.hip)];

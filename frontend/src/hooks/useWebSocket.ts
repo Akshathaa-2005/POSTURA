@@ -70,7 +70,9 @@ export function useWebSocket({ exerciseId, active, sessionKey }: { exerciseId: s
 
     return () => {
       const s = useWorkoutState.getState();
-      socket.send({ type: "end", reps: s.reps, avg_score: s.averageScore, duration_sec: s.activeMs / 1000 });
+      // Hold exercises report seconds held in the reps field (the backend knows which mode the exercise uses).
+      const reps = s.holdMs > 0 && s.reps === 0 ? Math.round(s.holdMs / 1000) : s.reps;
+      socket.send({ type: "end", reps, avg_score: s.averageScore, duration_sec: s.activeMs / 1000 });
       socket.close();
       socketRef.current = null;
     };

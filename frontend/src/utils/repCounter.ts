@@ -42,7 +42,7 @@ export class RepCounter {
         return null;
       }
       if (reachedPeak) {
-        this.reps += 1;
+        // A candidate: the caller decides whether form was good enough and calls commit().
         return { type: "rep", rom: 100, at: now };
       }
       if (wasMoving && rom >= PARTIAL_THRESHOLD * 100) {
@@ -60,6 +60,10 @@ export class RepCounter {
       this.phase = "moving";
     }
     return null;
+  }
+
+  commit() {
+    this.reps += 1;
   }
 
   reset() {

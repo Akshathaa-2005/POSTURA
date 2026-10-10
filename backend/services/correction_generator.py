@@ -24,25 +24,45 @@ _variants: dict[tuple[str, str, str | None, str], list[str]] = {}
 _rotation: dict[tuple[str, str, str | None, str], itertools.cycle] = {}
 
 
+SYSTEM_PROMPT = """You are Postura, a calm and encouraging personal trainer speaking to someone mid-workout.
+You rephrase an expert's correction cue into one short sentence that will be read aloud.
+
+Rules:
+- One sentence, at most 16 words, easy to say in one breath.
+- Keep the expert cue's exact meaning, body parts and side (left/right). Never add new advice.
+- Say what to do, not what went wrong. Use "you"/imperatives, warm but direct.
+- Plain words: no numbers or degrees, no jargon, no quotes, no emojis, no greetings.
+
+Examples:
+Exercise: Push-Up · Problem right now: Hips sagging (significant)
+Expert cue: Lift your hips — squeeze your glutes and brace your core
+Coach: Squeeze your glutes and lift those hips into a strong straight line.
+
+Exercise: Bodyweight Squat · Problem on the last rep: Not deep enough (minor)
+Expert cue: Sink a little deeper — aim for thighs parallel to the floor
+Coach: Next one, sit a touch deeper until your thighs are level with the floor.
+
+Exercise: Jumping Jack · Problem on the last rep: Arms not overhead (minor)
+Expert cue: Your left arm isn't reaching overhead — swing it all the way up
+Coach: Reach that left arm all the way up overhead on the next jump."""
+
+
 def build_prompt(exercise: dict[str, Any], label: str, cue: str, status: str, from_rep: bool, avoid: list[str]) -> str:
-    when = "on their last rep" if from_rep else "right now"
-    urgency = "This is a significant form problem." if status == "bad" else "This is a minor adjustment."
+    when = "on the last rep" if from_rep else "right now"
+    severity = "significant" if status == "bad" else "minor"
     avoid_text = "".join(f"\n- {a}" for a in avoid)
     return (
-        "You are a warm, encouraging personal trainer giving short spoken cues during a workout.\n"
-        f"Exercise: {exercise['name']}.\n"
-        f"Problem {when}: {label}. {urgency}\n"
-        f"Expert cue: \"{cue}\"\n\n"
-        "Rephrase the expert cue as ONE spoken sentence of at most 16 words. Keep its exact meaning and "
-        "body parts (including left/right). Be specific and positive; tell them what to do, not what they did wrong. "
-        "No greetings, no quotes, no emojis."
-        + (f"\nDon't repeat these earlier phrasings:{avoid_text}" if avoid else "")
+        f"Exercise: {exercise['name']} · Problem {when}: {label} ({severity})\n"
+        f"Expert cue: {cue}\n"
+        + (f"Use different wording from these earlier lines:{avoid_text}\n" if avoid else "")
+        + "Coach:"
     )
 
 
 def _clean(text: str) -> str:
-    # Models often wrap replies in quotes; drop them so sentence splitting works.
+    # Models often wrap replies in quotes or echo the "Coach:" label; drop both.
     text = re.sub(r"\s+", " ", re.sub(r'["“”]', "", text)).strip()
+    text = re.sub(r"^coach:\s*", "", text, flags=re.IGNORECASE)
     first = re.split(r"(?<=[.!?])\s+", text)[0]
     return first if len(first.split()) <= 24 else ""
 
@@ -66,9 +86,10 @@ async def _ask_llm(prompt: str) -> str:
             f"{s.ollama_api_url}/api/generate",
             json={
                 "model": s.ollama_model,
+                "system": SYSTEM_PROMPT,
                 "prompt": prompt,
                 "stream": False,
-                "options": {"temperature": 0.7, "num_predict": 48},
+                "options": {"temperature": 0.7, "num_predict": 48, "stop": ["\n"]},
             },
         )
         r.raise_for_status()

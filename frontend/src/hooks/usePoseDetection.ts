@@ -5,6 +5,10 @@ import type { Landmark } from "@/types/mediapipe";
 
 const WASM_PATH = "/mediapipe/wasm";
 const MODEL_URL = process.env.NEXT_PUBLIC_POSE_MODEL_URL || "/mediapipe/models/pose_landmarker_lite.task";
+// Used only if the self-hosted files are missing (e.g. `npm run setup:mediapipe` never ran).
+const CDN_WASM_PATH = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
+const CDN_MODEL_URL =
+  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 
 export interface FrameInfo {
   width: number;
@@ -21,10 +25,13 @@ let landmarkerPromise: Promise<PoseLandmarker> | null = null;
 function getLandmarker(): Promise<PoseLandmarker> {
   landmarkerPromise ??= (async () => {
     const { FilesetResolver, PoseLandmarker } = await import("@mediapipe/tasks-vision");
-    const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
+    const selfHosted = await fetch(MODEL_URL, { method: "HEAD" }).then((r) => r.ok, () => false);
+    if (!selfHosted) console.warn("Self-hosted pose model not found; loading MediaPipe from the CDN");
+    const vision = await FilesetResolver.forVisionTasks(selfHosted ? WASM_PATH : CDN_WASM_PATH);
+    const modelAssetPath = selfHosted ? MODEL_URL : CDN_MODEL_URL;
     const create = (delegate: "GPU" | "CPU") =>
       PoseLandmarker.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: MODEL_URL, delegate },
+        baseOptions: { modelAssetPath, delegate },
         runningMode: "VIDEO",
         numPoses: 1,
         minPoseDetectionConfidence: 0.5,
@@ -95,6 +102,12 @@ export function usePoseDetection(
           audio: false,
         });
         if (cancelled) return;
+        // Unplugged webcam, revoked permission, or another app grabbing the camera.
+        stream.getVideoTracks()[0]?.addEventListener("ended", () => {
+          if (cancelled) return;
+          setError("The camera disconnected. Check it's plugged in and not in use, then try again.");
+          setStatus("error");
+        });
         video.srcObject = stream;
         await video.play();
 
@@ -114,7 +127,14 @@ export function usePoseDetection(
           lastVideoTime = video.currentTime;
 
           const now = performance.now();
-          const result = landmarker.detectForVideo(video, now);
+          let result;
+          try {
+            result = landmarker.detectForVideo(video, now);
+          } catch (err) {
+            // A single bad frame (e.g. during a resolution change) shouldn't end the workout.
+            console.warn("Pose detection skipped a frame", err);
+            return;
+          }
           fps = fps ? fps * 0.9 + (1000 / Math.max(1, now - lastFrameAt)) * 0.1 : 30;
           lastFrameAt = now;
 

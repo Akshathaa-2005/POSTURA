@@ -1,1 +1,0 @@
-self.__REACT_LOADABLE_MANIFEST='{"hooks/usePoseDetection.ts -> @mediapipe/tasks-vision":{"id":4689,"files":["static/chunks/689.d9a8491c39f37eb0.js","static/chunks/675.45c002cb77d048cd.js"]}}';

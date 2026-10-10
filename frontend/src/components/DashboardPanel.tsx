@@ -6,7 +6,7 @@ import CurrentIssueCard from "./CurrentIssueCard";
 import FormScoreMeter from "./FormScoreMeter";
 import RepCounter from "./RepCounter";
 
-export default function DashboardPanel({ exercise }: { exercise: Exercise }) {
+export default function DashboardPanel({ exercise, mirrored }: { exercise: Exercise; mirrored: boolean }) {
   const activeMs = useWorkoutState((s) => s.activeMs);
   const averageScore = useWorkoutState((s) => s.averageScore);
   const fps = useWorkoutState((s) => s.fps);
@@ -14,8 +14,8 @@ export default function DashboardPanel({ exercise }: { exercise: Exercise }) {
   return (
     <aside className="flex flex-col gap-4 lg:sticky lg:top-6">
       <FormScoreMeter />
-      <RepCounter />
-      <CurrentIssueCard exercise={exercise} />
+      <RepCounter exercise={exercise} />
+      <CurrentIssueCard exercise={exercise} mirrored={mirrored} />
       <AICoachOverlay />
 
       <section className="grid grid-cols-3 divide-x divide-slate/10 overflow-hidden rounded-[22px] bg-sand/60">

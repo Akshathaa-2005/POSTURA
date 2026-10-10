@@ -73,6 +73,7 @@ export default function FormScoreMeter() {
               <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-mist">
                 <motion.div
                   className="h-full rounded-full"
+                  initial={{ width: 0 }}
                   animate={{ width: `${value ?? 0}%`, backgroundColor: STATUS_COLORS[scoreStatus(value)] }}
                   transition={{ duration: 0.5 }}
                 />

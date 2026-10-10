@@ -9,3 +9,11 @@ backend/ai_coach.db
 backend/static/audio/
 backend/.env
 .pytest_cache/
+
+# Python virtualenvs, model caches and build output (never commit these)
+.venv/
+venv/
+backend/.cache/
+frontend/.next-verify/
+frontend/next-env.d.ts
+*.db

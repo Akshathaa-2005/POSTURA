@@ -69,6 +69,7 @@ class UserStats(BaseModel):
     user_id: str
     total_sessions: int
     total_reps: int
+    total_hold_sec: int
     total_duration_sec: float
     avg_score: float | None
     by_exercise: dict[str, int]
