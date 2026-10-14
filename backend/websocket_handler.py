@@ -33,7 +33,12 @@ from config import get_settings
 from database import SessionLocal
 from models import EndMessage, IssueMessage, PraiseMessage, RepMessage, StartMessage
 from services import user_service
-from services.correction_generator import encouragement, generate_correction, ollama_available
+from services.correction_generator import (
+    encouragement,
+    generate_avatar_command,
+    generate_correction,
+    ollama_available,
+)
 from services.exercises import fault_cue, get_exercise, get_fault
 from services.tts_service import text_to_speech, tts_available
 
@@ -191,6 +196,7 @@ class CoachSession:
             text, source = await generate_correction(
                 self.exercise, fault["id"], fault["label"], cue, msg.status, msg.side, msg.from_rep
             )
+            avatar_cmd = generate_avatar_command(self.exercise, fault["id"], text, msg.side)
             await self.send(
                 {
                     "type": "correction",
@@ -200,6 +206,7 @@ class CoachSession:
                     "status": msg.status,
                     "text": text,
                     "source": source,
+                    "avatar_command": avatar_cmd.model_dump() if avatar_cmd else None,
                 }
             )
             if session_id:

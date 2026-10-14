@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { ModelRead } from "@/ml/formModel";
-import type { DetectionStatus, FormIssue, JointStatus, RepEvent, RepPhase, ScoreBreakdown } from "@/types";
+import type { AvatarCommand, DetectionStatus, FormIssue, JointStatus, RepEvent, RepPhase, ScoreBreakdown } from "@/types";
 import type { EngineSnapshot } from "@/utils/workoutEngine";
 import type { ConnectionState } from "@/utils/websocket";
 import type { Landmark } from "@/types/mediapipe";
@@ -22,6 +22,7 @@ export interface CoachCorrection {
   text: string;
   source: "llm" | "template" | "cache";
   at: number;
+  avatarCommand?: AvatarCommand | null;
 }
 
 export interface CoachVoice {
@@ -37,6 +38,7 @@ export interface CoachState {
   tts: boolean;
   correction: CoachCorrection | null;
   voice: CoachVoice | null;
+  avatarCommand: AvatarCommand | null;
 }
 
 interface WorkoutState {
@@ -81,6 +83,7 @@ const initialCoach: CoachState = {
   tts: false,
   correction: null,
   voice: null,
+  avatarCommand: null,
 };
 
 const initialMetrics = {
@@ -115,7 +118,7 @@ export const useWorkoutState = create<WorkoutState>((set) => ({
       exerciseId,
       repTarget,
       ...initialMetrics,
-      coach: { ...state.coach, sessionId: null, correction: null, voice: null },
+      coach: { ...state.coach, sessionId: null, correction: null, voice: null, avatarCommand: null },
     })),
 
   setCoach: (patch) => set((state) => ({ coach: { ...state.coach, ...patch } })),
