@@ -1,4 +1,4 @@
-import type { JointStatus, Side } from "@/types";
+import type { AvatarCommand, JointStatus, Side } from "@/types";
 
 export type ServerMessage =
   | { type: "session_started"; session_id: string; exercise_id: string; llm: boolean; tts: boolean }
@@ -10,6 +10,7 @@ export type ServerMessage =
       status: JointStatus;
       text: string;
       source: "llm" | "template" | "cache";
+      avatar_command?: AvatarCommand | null;
     }
   | { type: "voice"; id: number; url: string; text: string; kind: "correction" | "praise" | "intro" }
   | { type: "session_saved"; session_id: string }

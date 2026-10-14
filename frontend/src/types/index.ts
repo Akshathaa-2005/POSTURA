@@ -154,3 +154,6 @@ export type DetectionStatus =
   | "running"
   | "paused"
   | "error";
+
+export * from "./avatar";
+

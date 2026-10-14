@@ -13,6 +13,13 @@ from typing import Any, Literal
 import httpx
 
 from config import get_settings
+from schemas.avatar import (
+    AvatarCorrectionCommand,
+    BoneTransform,
+    CANONICAL_AVATAR_CORRECTIONS,
+    KinematicClamper,
+    Vector3D,
+)
 
 log = logging.getLogger(__name__)
 
@@ -123,6 +130,67 @@ async def generate_correction(
     if known:
         return random.choice(known), "cache"
     return cue if cue.endswith((".", "!", "?")) else f"{cue}.", "template"
+
+
+def generate_avatar_command(
+    exercise: dict[str, Any],
+    fault_id: str,
+    verbal_cue: str,
+    side: str | None = None,
+) -> AvatarCorrectionCommand:
+    """Produces a kinematically validated avatar command for the detected exercise fault."""
+    data = CANONICAL_AVATAR_CORRECTIONS.get(fault_id)
+    if not data:
+        # Default subtle posture adjustment on Spine
+        data = {
+            "highlight_joints": ["Spine"],
+            "actions": [
+                {
+                    "bone_name": "Spine",
+                    "rotation_mode": "relative_offset",
+                    "target_rotation": {"x": -8.0, "y": 0.0, "z": 0.0},
+                    "duration_ms": 600,
+                    "easing": "easeInOutQuad",
+                }
+            ],
+        }
+
+    highlight_joints = list(data.get("highlight_joints", []))
+    actions: list[BoneTransform] = []
+
+    for item in data.get("actions", []):
+        bone = item["bone_name"]
+        # If a specific side is flagged, filter or re-target unilateral limbs
+        if side:
+            prefix = "Left" if side == "left" else "Right"
+            opp_prefix = "Right" if side == "left" else "Left"
+            if bone.startswith(opp_prefix):
+                continue
+
+        rot = item["target_rotation"]
+        action = BoneTransform(
+            bone_name=bone,
+            rotation_mode=item.get("rotation_mode", "relative_offset"),
+            target_rotation=Vector3D(x=rot["x"], y=rot["y"], z=rot["z"]),
+            duration_ms=item.get("duration_ms", 800),
+            easing=item.get("easing", "easeInOutQuad"),
+        )
+        actions.append(action)
+
+    if side:
+        prefix = "Left" if side == "left" else "Right"
+        highlight_joints = [
+            j for j in highlight_joints
+            if not (j.startswith("Left") or j.startswith("Right")) or j.startswith(prefix)
+        ]
+
+    cmd = AvatarCorrectionCommand(
+        verbal_cue=verbal_cue,
+        primary_fault=fault_id,
+        highlight_joints=highlight_joints,
+        avatar_actions=actions,
+    )
+    return KinematicClamper.sanitize(cmd)
 
 
 def encouragement(exercise: dict[str, Any]) -> str:

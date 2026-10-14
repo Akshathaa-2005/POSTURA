@@ -12,6 +12,7 @@ function handleMessage(msg: ServerMessage) {
       break;
     case "correction":
       setCoach({
+        avatarCommand: msg.avatar_command ?? null,
         correction: {
           id: msg.id,
           faultId: msg.fault_id,
@@ -20,6 +21,7 @@ function handleMessage(msg: ServerMessage) {
           text: msg.text,
           source: msg.source,
           at: Date.now(),
+          avatarCommand: msg.avatar_command ?? null,
         },
       });
       break;
