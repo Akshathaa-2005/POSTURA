@@ -25,6 +25,8 @@ interface Props {
   onPraise?: () => void;
   /** Live landmarks ref passed to 3D avatar for 60 FPS real-time motion mimicry */
   liveLandmarksRef?: React.MutableRefObject<Landmark[] | null>;
+  /** Receives the video's width / height alongside the live landmarks */
+  liveAspectRef?: React.MutableRefObject<number>;
 }
 
 /** How often (ms) the React dashboard is refreshed; the canvas updates every frame regardless. */
@@ -42,6 +44,7 @@ export default function VideoPoseContainer({
   onCoachIssue,
   onPraise,
   liveLandmarksRef,
+  liveAspectRef,
 }: Props) {
   const callbacks = useRef({ onRepEvent, onCoachIssue, onPraise });
   callbacks.current = { onRepEvent, onCoachIssue, onPraise };
@@ -77,6 +80,9 @@ export default function VideoPoseContainer({
       if (liveLandmarksRef) {
         liveLandmarksRef.current = snap.landmarks;
       }
+      if (liveAspectRef && height > 0) {
+        liveAspectRef.current = width / height;
+      }
       if (snap.repEvent) {
         pendingEvent.current = snap.repEvent;
         const ev = snap.repEvent;
@@ -102,7 +108,7 @@ export default function VideoPoseContainer({
         pendingEvent.current = null;
       }
     },
-    [engine, exercise.id, dims.width, dims.height, applySnapshot, liveLandmarksRef],
+    [engine, exercise.id, dims.width, dims.height, applySnapshot, liveLandmarksRef, liveAspectRef],
   );
 
   const { status, error } = usePoseDetection(videoRef, { enabled: cameraOn, paused, onResults });

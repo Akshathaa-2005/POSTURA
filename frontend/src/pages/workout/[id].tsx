@@ -26,6 +26,7 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
 
   // Shared 60 FPS live pose landmarks ref connecting VideoPoseContainer to AvatarCoach3D
   const liveLandmarksRef = useRef<Landmark[] | null>(null);
+  const liveAspectRef = useRef(16 / 9);
 
   // Record mode is for collecting labelled reps to train the form model: open any workout with ?record=1.
   const [record, setRecord] = useLocalStorage("postura.record", false);
@@ -40,7 +41,7 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
 
   // Active command: prefer LLM-generated command from WebSocket, fall back to canonical biomechanical rule
   const activeCommand =
-    coach.avatarCommand || (issue ? getAvatarCommandForFault(issue.id, issue.side) : null);
+    coach.avatarCommand || (issue ? getAvatarCommandForFault(issue.id, issue.side, exercise.id) : null);
 
   const isSpeaking = Boolean(coach.voice && coach.correction && Date.now() - coach.correction.at < 5000);
 
@@ -130,6 +131,7 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
                   onCoachIssue={sendIssue}
                   onPraise={sendPraise}
                   liveLandmarksRef={liveLandmarksRef}
+                  liveAspectRef={liveAspectRef}
                 />
               </div>
             </div>
@@ -154,6 +156,7 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
                   autoPlay
                   isSpeaking={isSpeaking}
                   liveLandmarksRef={liveLandmarksRef}
+                  liveAspectRef={liveAspectRef}
                   cameraOn={cameraOn && !paused}
                   mirrored={mirrored}
                 />

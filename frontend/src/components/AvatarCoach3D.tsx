@@ -2,7 +2,20 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import * as THREE from "three";
 import type { AvatarCommand } from "@/types";
 import type { Landmark } from "@/types/mediapipe";
-import { clampAnatomicalRotation, solveLandmarksToAvatar } from "@/utils/kinematicSolver";
+import { solveLandmarksToAvatar } from "@/utils/kinematicSolver";
+import { buildExerciseReplaySequence, getExerciseAnchor } from "@/utils/exerciseReplays";
+import type { ExerciseKeyframe } from "@/utils/exerciseReplays";
+import {
+  applyPoseRotations,
+  buildRigSkeleton,
+  centerAvatar,
+  createGroundingState,
+  eulerDegToQuaternion,
+  FLOOR_Y,
+  groundAvatar,
+} from "@/utils/avatarRig";
+import type { GroundAnchor } from "@/utils/avatarRig";
+import { clampAnatomicalRotation } from "@/utils/kinematicSolver";
 
 interface Props {
   command?: AvatarCommand | null;
@@ -13,6 +26,8 @@ interface Props {
   isSpeaking?: boolean;
   /** Live MediaPipe landmarks ref for 60 FPS real-time motion mimicry */
   liveLandmarksRef?: React.MutableRefObject<Landmark[] | null>;
+  /** Video width / height of the landmark source, for undistorted limb directions */
+  liveAspectRef?: React.MutableRefObject<number>;
   cameraOn?: boolean;
   mirrored?: boolean;
 }
@@ -38,6 +53,7 @@ export default function AvatarCoach3D({
   autoPlay = true,
   isSpeaking = false,
   liveLandmarksRef,
+  liveAspectRef,
   cameraOn = false,
   mirrored = true,
 }: Props) {
@@ -55,6 +71,17 @@ export default function AvatarCoach3D({
   mirroredRef.current = mirrored;
   const liveLandmarksRefCurrent = useRef(liveLandmarksRef);
   liveLandmarksRefCurrent.current = liveLandmarksRef;
+  const liveAspectRefCurrent = useRef(liveAspectRef);
+  liveAspectRefCurrent.current = liveAspectRef;
+  // How the avatar stays planted on the floor (feet, hands, pelvis) for the current exercise
+  const anchorRef = useRef<GroundAnchor>(getExerciseAnchor(exerciseId));
+  const groundingRef = useRef(createGroundingState());
+  /** Commanded head orientation; the idle micro-sway is layered on top of it. */
+  const headBaseRef = useRef(new THREE.Object3D());
+
+  useEffect(() => {
+    anchorRef.current = getExerciseAnchor(exerciseId);
+  }, [exerciseId]);
 
   // Auto-switch to live mimicry whenever camera becomes active
   useEffect(() => {
@@ -71,6 +98,7 @@ export default function AvatarCoach3D({
   const bonesRef = useRef<Map<string, THREE.Object3D>>(new Map());
   const initialRotationsRef = useRef<Map<string, THREE.Euler>>(new Map());
   const initialPositionsRef = useRef<Map<string, THREE.Vector3>>(new Map());
+  const initialQuaternionsRef = useRef<Map<string, THREE.Quaternion>>(new Map());
   const jointMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const tweensRef = useRef<ActiveTween[]>([]);
   const reqIdRef = useRef<number | null>(null);
@@ -87,6 +115,12 @@ export default function AvatarCoach3D({
   // Mouse orbit dragging
   const isDraggingRef = useRef(false);
   const prevMouseRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Coach verbal cue overlay (shown during replay)
+  const [coachCue, setCoachCue] = useState<string | null>(null);
+  const [replayPhaseLabel, setReplayPhaseLabel] = useState<string | null>(null);
+  // Pending replay keyframe timeouts for idempotent cancellation
+  const replayTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const setCameraPreset = useCallback((preset: "perspective" | "side" | "front") => {
     setViewAngle(preset);
@@ -107,29 +141,131 @@ export default function AvatarCoach3D({
     }
   }, []);
 
+  /** Completely resets all bone orientations and positions to the immutable bind pose snapshot */
   const resetPose = useCallback(() => {
+    replayTimeoutsRef.current.forEach(clearTimeout);
+    replayTimeoutsRef.current = [];
     tweensRef.current = [];
+    setCoachCue(null);
+    setReplayPhaseLabel(null);
     bonesRef.current.forEach((bone, name) => {
-      const initRot = initialRotationsRef.current.get(name);
-      if (initRot) bone.rotation.copy(initRot);
+      const initQuat = initialQuaternionsRef.current.get(name);
+      if (initQuat) bone.quaternion.copy(initQuat);
       const initPos = initialPositionsRef.current.get(name);
       if (initPos) bone.position.copy(initPos);
     });
+    headBaseRef.current.quaternion.identity();
+    anchorRef.current = getExerciseAnchor(exerciseId);
+    if (orbitGroupRef.current) {
+      groundAvatar(bonesRef.current, orbitGroupRef.current, groundingRef.current, anchorRef.current);
+      centerAvatar(bonesRef.current, orbitGroupRef.current, groundingRef.current);
+    }
 
     jointMeshesRef.current.forEach((mesh) => {
       const mat = mesh.material as THREE.MeshStandardMaterial;
       mat.color.setHex(0xe53935);
       mat.emissive.setHex(0x991b1b);
     });
+  }, [exerciseId]);
+
+  /** Schedules a single keyframe phase onto the tween queue. */
+  const scheduleKeyframe = useCallback((
+    kf: ExerciseKeyframe,
+    highlightJoints: string[],
+    delayMs: number
+  ) => {
+    const id = setTimeout(() => {
+      const now = performance.now();
+
+      // ── Update joint highlights ──────────────────────────────────────────────
+      const activeHighlights = kf.highlightJoints ?? highlightJoints;
+      jointMeshesRef.current.forEach((mesh, name) => {
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        const isHighlighted = activeHighlights.some(
+          (j) => j.toLowerCase() === name.toLowerCase() || name.toLowerCase().includes(j.toLowerCase())
+        );
+        if (isHighlighted) {
+          mat.color.setHex(0xffaa00);
+          mat.emissive.setHex(0xff7700);
+        } else {
+          mat.color.setHex(0xe53935);
+          mat.emissive.setHex(0x881111);
+        }
+      });
+
+      // ── Update coach cue overlay ─────────────────────────────────────────────
+      setCoachCue(kf.cue);
+      setReplayPhaseLabel(kf.phaseLabel);
+
+      // ── Per-bone tweens from the current pose → keyframe target ─────────────
+      // The floor-contact pass places the hips, so only rotations are tweened.
+      for (const [boneName, rotDeg] of Object.entries(kf.boneRotations)) {
+        if (!rotDeg) continue; // guard for Partial<Record> undefined values
+        const realBone = bonesRef.current.get(boneName);
+        if (!realBone) continue;
+        // Head tweens drive the commanded base orientation; the render loop adds the idle sway
+        const bone = boneName === "Head" ? headBaseRef.current : realBone;
+
+        tweensRef.current = tweensRef.current.filter((t) => t.boneName !== boneName);
+        tweensRef.current.push({
+          boneName,
+          boneObject: bone,
+          startQuat: bone.quaternion.clone(),
+          targetQuat: eulerDegToQuaternion(clampAnatomicalRotation(boneName, rotDeg)),
+          startTime: now,
+          duration: kf.durationMs,
+          easing: kf.easing,
+        });
+      }
+    }, delayMs);
+
+    replayTimeoutsRef.current.push(id);
   }, []);
 
-  const applyCommand = useCallback((cmd: AvatarCommand) => {
-    if (!cmd || !cmd.avatar_actions) return;
+  /**
+   * Full Exercise Replay — Idempotent Multi-Stage Demonstration.
+   *
+   * Each click:
+   *   1. Cancels any pending replay timeouts (prevents overlapping sequences).
+   *   2. Clears active tweens and snaps the model into the demo's starting position on the floor.
+   *   3. Schedules each exercise keyframe as a chained, delayed tween batch.
+   *   4. Shows a coach cue overlay and joint highlights per stage.
+   *
+   * Repeated clicks always produce an identical result — no cumulative drift.
+   */
+  const applyCommand = useCallback((cmd: AvatarCommand | null) => {
+    // ── 1. Cancel any running replay sequence ────────────────────────────────
+    replayTimeoutsRef.current.forEach(clearTimeout);
+    replayTimeoutsRef.current = [];
+    tweensRef.current = [];
 
-    // Highlight flagged joints with vivid amber/coral glow
+    // ── 2. Build the exercise demo (focused on the fault when there is one) ──
+    const seq = buildExerciseReplaySequence(cmd, exerciseId);
+
+    // ── 3. Snap into the starting position, centred and standing on the floor ─
+    const orbitGroup = orbitGroupRef.current;
+    const startPose = seq.keyframes[0]?.boneRotations ?? {};
+    bonesRef.current.forEach((bone, name) => {
+      const bindPos = initialPositionsRef.current.get(name);
+      if (bindPos) bone.position.copy(bindPos);
+    });
+    applyPoseRotations(bonesRef.current, startPose);
+    headBaseRef.current.quaternion.copy(bonesRef.current.get("Head")?.quaternion ?? new THREE.Quaternion());
+    anchorRef.current = seq.anchor;
+    if (orbitGroup) {
+      groundAvatar(bonesRef.current, orbitGroup, groundingRef.current, seq.anchor);
+      centerAvatar(bonesRef.current, orbitGroup, groundingRef.current);
+      groundAvatar(bonesRef.current, orbitGroup, groundingRef.current, seq.anchor);
+    }
+
+    // Show the top-level verbal cue immediately
+    setCoachCue(seq.verbalCue);
+    setReplayPhaseLabel(seq.keyframes[0]?.phaseLabel ?? null);
+
+    // ── 4. Apply initial joint highlights ───────────────────────────────────
     jointMeshesRef.current.forEach((mesh, name) => {
       const mat = mesh.material as THREE.MeshStandardMaterial;
-      const isHighlighted = cmd.highlight_joints?.some(
+      const isHighlighted = seq.highlightJoints.some(
         (j) => j.toLowerCase() === name.toLowerCase() || name.toLowerCase().includes(j.toLowerCase())
       );
       if (isHighlighted) {
@@ -141,39 +277,23 @@ export default function AvatarCoach3D({
       }
     });
 
-    tweensRef.current = [];
-    const now = performance.now();
-
-    for (const action of cmd.avatar_actions) {
-      const bone = bonesRef.current.get(action.bone_name);
-      if (!bone) continue;
-
-      const startQuat = bone.quaternion.clone();
-      const safeRot = clampAnatomicalRotation(action.bone_name, action.target_rotation);
-      const radX = THREE.MathUtils.degToRad(safeRot.x);
-      const radY = THREE.MathUtils.degToRad(safeRot.y);
-      const radZ = THREE.MathUtils.degToRad(safeRot.z);
-      const deltaEuler = new THREE.Euler(radX, radY, radZ, "XYZ");
-      const deltaQuat = new THREE.Quaternion().setFromEuler(deltaEuler);
-
-      let targetQuat = new THREE.Quaternion();
-      if (action.rotation_mode === "relative_offset") {
-        targetQuat.multiplyQuaternions(startQuat, deltaQuat);
-      } else {
-        targetQuat.copy(deltaQuat);
-      }
-
-      tweensRef.current.push({
-        boneName: action.bone_name,
-        boneObject: bone,
-        startQuat,
-        targetQuat,
-        startTime: now,
-        duration: action.duration_ms || 800,
-        easing: action.easing || "easeInOutQuad",
-      });
+    // ── 5. Schedule each keyframe as a chained delay ────────────────────────
+    // Each keyframe fires after all previous durations have elapsed
+    let cumulativeDelay = 0;
+    for (const kf of seq.keyframes) {
+      scheduleKeyframe(kf, seq.highlightJoints, cumulativeDelay);
+      cumulativeDelay += kf.durationMs;
     }
-  }, []);
+
+    // ── 6. Clear cue overlay after the full sequence ends ───────────────────
+    const clearId = setTimeout(() => {
+      setCoachCue(null);
+      setReplayPhaseLabel(null);
+    }, cumulativeDelay + 1200);
+    replayTimeoutsRef.current.push(clearId);
+  }, [exerciseId, scheduleKeyframe]);
+
+
 
   // Update overlay visibility when visMode changes
   useEffect(() => {
@@ -256,7 +376,7 @@ export default function AvatarCoach3D({
     });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
-    floor.position.y = -0.01;
+    floor.position.y = FLOOR_Y - 0.002;
     floor.receiveShadow = true;
     orbitGroup.add(floor);
 
@@ -295,7 +415,8 @@ export default function AvatarCoach3D({
       linewidth: 2,
     });
 
-    const bones = new Map<string, THREE.Object3D>();
+    // Bone hierarchy (segment lengths) is shared with the replay library and ground-contact solver
+    const bones = buildRigSkeleton();
     const jointMeshes = new Map<string, THREE.Mesh>();
 
     const makeJoint = (name: string, radius = 0.026) => {
@@ -339,10 +460,8 @@ export default function AvatarCoach3D({
     // ========================================================
 
     // 1. Pelvis / Hips (Root)
-    const hips = new THREE.Group();
-    hips.position.set(0, 0.94, 0);
+    const hips = bones.get("Hips")!;
     orbitGroup.add(hips);
-    bones.set("Hips", hips);
     const hipsJoint = makeJoint("Hips", 0.03);
 
     // Anatomical Pelvis & Gluteal Muscle Volume
@@ -354,10 +473,7 @@ export default function AvatarCoach3D({
     hips.add(pelvisMesh);
 
     // 2. Spine (Lumbar / Abdomen)
-    const spine = new THREE.Group();
-    spine.position.set(0, 0.075, 0);
-    hips.add(spine);
-    bones.set("Spine", spine);
+    const spine = bones.get("Spine")!;
     const spineJoint = makeJoint("Spine", 0.024);
 
     // Abdominal wall with tapered athletic waist
@@ -369,10 +485,7 @@ export default function AvatarCoach3D({
     spine.add(lumbarMesh);
 
     // 3. Spine1 (Chest / Thorax / Pectorals)
-    const spine1 = new THREE.Group();
-    spine1.position.set(0, 0.12, 0);
-    spine.add(spine1);
-    bones.set("Spine1", spine1);
+    const spine1 = bones.get("Spine1")!;
     chestMeshRef.current = spine1;
     const chestJoint = makeJoint("Spine1", 0.026);
 
@@ -400,10 +513,7 @@ export default function AvatarCoach3D({
     spine1.add(rightPec);
 
     // 4. Neck & Anatomical Head
-    const neck = new THREE.Group();
-    neck.position.set(0, 0.195, 0.005);
-    spine1.add(neck);
-    bones.set("Neck", neck);
+    const neck = bones.get("Neck")!;
     neckRef.current = neck;
     const neckJoint = makeJoint("Neck", 0.022);
 
@@ -413,11 +523,8 @@ export default function AvatarCoach3D({
     neckMesh.castShadow = true;
     neck.add(neckMesh);
 
-    // Head
-    const head = new THREE.Group();
-    head.position.set(0, 0.085, 0);
-    neck.add(head);
-    bones.set("Head", head);
+    // Head (neutral upright posture with -1.8cm axial cervical retraction)
+    const head = bones.get("Head")!;
     headRef.current = head;
     const headJoint = makeJoint("Head", 0.024);
 
@@ -449,10 +556,7 @@ export default function AvatarCoach3D({
     head.add(nose);
 
     // 5. Left Leg (Hip -> Quadriceps -> Knee -> Calf -> Foot)
-    const leftUpLeg = new THREE.Group();
-    leftUpLeg.position.set(-0.1, -0.05, 0);
-    hips.add(leftUpLeg);
-    bones.set("LeftUpLeg", leftUpLeg);
+    const leftUpLeg = bones.get("LeftUpLeg")!;
     const leftHipJoint = makeJoint("LeftUpLeg", 0.026);
 
     // Anatomical Quadriceps Thigh (broader at top, defined teardrop)
@@ -463,10 +567,7 @@ export default function AvatarCoach3D({
     leftThigh.castShadow = true;
     leftUpLeg.add(leftThigh);
 
-    const leftLeg = new THREE.Group();
-    leftLeg.position.set(0, -0.38, 0);
-    leftUpLeg.add(leftLeg);
-    bones.set("LeftLeg", leftLeg);
+    const leftLeg = bones.get("LeftLeg")!;
     const leftKneeJoint = makeJoint("LeftLeg", 0.026);
 
     // Defined Patella (Kneecap)
@@ -484,10 +585,7 @@ export default function AvatarCoach3D({
     leftCalf.castShadow = true;
     leftLeg.add(leftCalf);
 
-    const leftFoot = new THREE.Group();
-    leftFoot.position.set(0, -0.38, 0);
-    leftLeg.add(leftFoot);
-    bones.set("LeftFoot", leftFoot);
+    const leftFoot = bones.get("LeftFoot")!;
     const leftAnkleJoint = makeJoint("LeftFoot", 0.022);
 
     const footGeo = new THREE.BoxGeometry(0.076, 0.055, 0.17);
@@ -497,10 +595,7 @@ export default function AvatarCoach3D({
     leftFoot.add(leftFootMesh);
 
     // 6. Right Leg (Hip -> Quadriceps -> Knee -> Calf -> Foot)
-    const rightUpLeg = new THREE.Group();
-    rightUpLeg.position.set(0.1, -0.05, 0);
-    hips.add(rightUpLeg);
-    bones.set("RightUpLeg", rightUpLeg);
+    const rightUpLeg = bones.get("RightUpLeg")!;
     const rightHipJoint = makeJoint("RightUpLeg", 0.026);
 
     const rightThigh = new THREE.Mesh(thighGeo, clayMat);
@@ -508,10 +603,7 @@ export default function AvatarCoach3D({
     rightThigh.castShadow = true;
     rightUpLeg.add(rightThigh);
 
-    const rightLeg = new THREE.Group();
-    rightLeg.position.set(0, -0.38, 0);
-    rightUpLeg.add(rightLeg);
-    bones.set("RightLeg", rightLeg);
+    const rightLeg = bones.get("RightLeg")!;
     const rightKneeJoint = makeJoint("RightLeg", 0.026);
 
     const rightPatella = new THREE.Mesh(patellaGeo, contourMat);
@@ -523,10 +615,7 @@ export default function AvatarCoach3D({
     rightCalf.castShadow = true;
     rightLeg.add(rightCalf);
 
-    const rightFoot = new THREE.Group();
-    rightFoot.position.set(0, -0.38, 0);
-    rightLeg.add(rightFoot);
-    bones.set("RightFoot", rightFoot);
+    const rightFoot = bones.get("RightFoot")!;
     const rightAnkleJoint = makeJoint("RightFoot", 0.022);
 
     const rightFootMesh = new THREE.Mesh(footGeo, clayMat);
@@ -535,10 +624,7 @@ export default function AvatarCoach3D({
     rightFoot.add(rightFootMesh);
 
     // 7. Left Arm (Shoulder -> Deltoid -> Bicep -> Forearm -> Hand)
-    const leftArm = new THREE.Group();
-    leftArm.position.set(-0.18, 0.17, 0);
-    spine1.add(leftArm);
-    bones.set("LeftArm", leftArm);
+    const leftArm = bones.get("LeftArm")!;
     const leftShoulderJoint = makeJoint("LeftArm", 0.026);
 
     // Sculpted Deltoid Cap
@@ -555,10 +641,7 @@ export default function AvatarCoach3D({
     leftBicep.castShadow = true;
     leftArm.add(leftBicep);
 
-    const leftForeArm = new THREE.Group();
-    leftForeArm.position.set(0, -0.26, 0);
-    leftArm.add(leftForeArm);
-    bones.set("LeftForeArm", leftForeArm);
+    const leftForeArm = bones.get("LeftForeArm")!;
     const leftElbowJoint = makeJoint("LeftForeArm", 0.024);
 
     // Forearm
@@ -578,10 +661,7 @@ export default function AvatarCoach3D({
     leftForeArm.add(leftHand);
 
     // 8. Right Arm (Shoulder -> Deltoid -> Bicep -> Forearm -> Hand)
-    const rightArm = new THREE.Group();
-    rightArm.position.set(0.18, 0.17, 0);
-    spine1.add(rightArm);
-    bones.set("RightArm", rightArm);
+    const rightArm = bones.get("RightArm")!;
     const rightShoulderJoint = makeJoint("RightArm", 0.026);
 
     const rightDeltoid = new THREE.Mesh(deltoidGeo, contourMat);
@@ -593,10 +673,7 @@ export default function AvatarCoach3D({
     rightBicep.castShadow = true;
     rightArm.add(rightBicep);
 
-    const rightForeArm = new THREE.Group();
-    rightForeArm.position.set(0, -0.26, 0);
-    rightArm.add(rightForeArm);
-    bones.set("RightForeArm", rightForeArm);
+    const rightForeArm = bones.get("RightForeArm")!;
     const rightElbowJoint = makeJoint("RightForeArm", 0.024);
 
     const rightForearmMesh = new THREE.Mesh(forearmGeo, clayMat);
@@ -672,7 +749,11 @@ export default function AvatarCoach3D({
     bones.forEach((bone, name) => {
       initialRotationsRef.current.set(name, bone.rotation.clone());
       initialPositionsRef.current.set(name, bone.position.clone());
+      initialQuaternionsRef.current.set(name, bone.quaternion.clone());
     });
+    headBaseRef.current.quaternion.identity();
+    groundAvatar(bones, orbitGroup, groundingRef.current, anchorRef.current);
+    centerAvatar(bones, orbitGroup, groundingRef.current);
 
     setCameraPreset(defaultView);
 
@@ -701,6 +782,9 @@ export default function AvatarCoach3D({
     // Render loop with Kinematic Link Updates
     const posA = new THREE.Vector3();
     const posB = new THREE.Vector3();
+    const identityQuat = new THREE.Quaternion();
+    const swayEuler = new THREE.Euler();
+    const swayQuat = new THREE.Quaternion();
 
     const animate = () => {
       reqIdRef.current = requestAnimationFrame(animate);
@@ -715,40 +799,25 @@ export default function AvatarCoach3D({
       let hasLivePose = false;
 
       if (isMimic && lms) {
-        const solved = solveLandmarksToAvatar(lms, mirroredRef.current);
+        const aspect = liveAspectRefCurrent.current?.current || 16 / 9;
+        const solved = solveLandmarksToAvatar(lms, mirroredRef.current, { aspect });
         if (solved) {
           hasLivePose = true;
           // Smoothly slerp each solved bone to mimic user's physical pose in real time
           solved.boneQuaternions.forEach((targetQuat, boneName) => {
-            const bone = bonesRef.current.get(boneName);
-            if (bone) {
-              bone.quaternion.slerp(targetQuat, 0.32);
-            }
+            const bone = boneName === "Head" ? headBaseRef.current : bonesRef.current.get(boneName);
+            bone?.quaternion.slerp(targetQuat, 0.32);
           });
-
-          // Adjust hips height dynamically for squats, lunges, and jumping jacks
-          if (solved.hipsPosition) {
-            const hipsBone = bonesRef.current.get("Hips");
-            if (hipsBone) {
-              hipsBone.position.lerp(solved.hipsPosition, 0.25);
-            }
-          }
         }
       }
 
       if (isMimic && !hasLivePose) {
         // Camera is active but user is momentarily out of frame: gently relax to neutral upright pose
         bonesRef.current.forEach((bone, name) => {
-          const initRot = initialRotationsRef.current.get(name);
-          if (initRot) {
-            const targetQuat = new THREE.Quaternion().setFromEuler(initRot);
-            bone.quaternion.slerp(targetQuat, 0.08);
-          }
-          const initPos = initialPositionsRef.current.get(name);
-          if (initPos) {
-            bone.position.lerp(initPos, 0.08);
-          }
+          const initQuat = initialQuaternionsRef.current.get(name);
+          if (initQuat) bone.quaternion.slerp(initQuat, 0.08);
         });
+        headBaseRef.current.quaternion.slerp(identityQuat, 0.08);
       }
 
       if (!isMimic) {
@@ -779,16 +848,24 @@ export default function AvatarCoach3D({
         chestMeshRef.current.scale.set(1 + 0.012 * breath, 1 + 0.008 * breath, 1 + 0.016 * breath);
       }
 
-      // 3. Subtle Organic Head Micro-Sway (only when head is not actively driven by mocap)
-      const isNeckAnimating = hasLivePose || tweens.some((t) => t.boneName === "Neck" || t.boneName === "Head");
-      if (!isNeckAnimating && headRef.current) {
-        const headSwayYaw = Math.sin(timeSec * 0.55) * 0.018 + Math.sin(timeSec * 1.1) * 0.009;
-        const headSwayPitch = Math.sin(timeSec * 0.75 + 0.4) * 0.014;
-        const headSwayRoll = Math.sin(timeSec * 0.4 + 1.0) * 0.007;
-        headRef.current.rotation.set(headSwayPitch, headSwayYaw, headSwayRoll);
+      // 3. Head = commanded orientation (+ organic micro-sway when not driven by mocap)
+      if (headRef.current) {
+        headRef.current.quaternion.copy(headBaseRef.current.quaternion);
+        if (!hasLivePose) {
+          swayEuler.set(
+            Math.sin(timeSec * 0.75 + 0.4) * 0.014,
+            Math.sin(timeSec * 0.55) * 0.018 + Math.sin(timeSec * 1.1) * 0.009,
+            Math.sin(timeSec * 0.4 + 1.0) * 0.007,
+            "YXZ"
+          );
+          headRef.current.quaternion.multiply(swayQuat.setFromEuler(swayEuler));
+        }
       }
 
-      // 4. Update Red Kinematic Bone Lines (Figure 3) in World Space
+      // 4. Floor contact: lowest body point rests on the floor, planted feet / hands don't slide
+      groundAvatar(bonesRef.current, orbitGroup, groundingRef.current, anchorRef.current, isMimic ? 0.01 : 0);
+
+      // 5. Update Red Kinematic Bone Lines (Figure 3) in World Space
       if (rigOverlayGroup.visible) {
         for (const link of kinematicLinks) {
           link.objA.getWorldPosition(posA);
@@ -919,6 +996,21 @@ export default function AvatarCoach3D({
             </>
           )}
         </div>
+
+        {/* Coach verbal cue + phase label overlay — shown during replay demos */}
+        {coachCue && (
+          <div className="absolute bottom-3 left-3 right-3 z-20 pointer-events-none">
+            {replayPhaseLabel && (
+              <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-blue-600/80 px-2.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm border border-blue-400/30">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-200 animate-pulse" />
+                {replayPhaseLabel}
+              </div>
+            )}
+            <div className="rounded-xl bg-[#0a0c10]/85 border border-slate-700/50 px-3 py-2 text-[12px] text-slate-100 leading-snug backdrop-blur-md shadow-xl">
+              {coachCue}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Aesthetic SMPL Model Control Bar */}
@@ -940,7 +1032,7 @@ export default function AvatarCoach3D({
           <button
             onClick={() => {
               setControlMode("coach");
-              if (command) applyCommand(command);
+              applyCommand(command ?? null);
             }}
             className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition flex items-center gap-1.5 ${
               controlMode === "coach"
@@ -1017,17 +1109,16 @@ export default function AvatarCoach3D({
             </button>
           </div>
 
-          {command && (
-            <button
-              onClick={() => {
-                setControlMode("coach");
-                applyCommand(command);
-              }}
-              className="rounded-full bg-red-600/20 text-red-400 hover:bg-red-600/30 px-2.5 py-0.5 text-[11px] font-medium transition"
-            >
-              Replay Fix
-            </button>
-          )}
+          <button
+            onClick={() => {
+              setControlMode("coach");
+              applyCommand(command ?? null);
+            }}
+            className="rounded-full bg-red-600/20 text-red-400 hover:bg-red-600/30 px-2.5 py-0.5 text-[11px] font-medium transition"
+            title={command ? "Replay full exercise repetition with corrected form demo" : "Demonstrate a full repetition with correct form"}
+          >
+            {command ? "Replay Fix" : "Play Demo"}
+          </button>
           <button
             onClick={resetPose}
             className="rounded-full bg-slate-800 text-slate-300 hover:text-white px-2 py-0.5 text-[10px] transition"

@@ -16,7 +16,7 @@ export default function AvatarCoachCard({ exercise }: Props) {
 
   // Active command: prefer backend LLM command, fall back to canonical rule
   const activeCommand =
-    coachAvatarCmd || (issue ? getAvatarCommandForFault(issue.id, issue.side) : null);
+    coachAvatarCmd || (issue ? getAvatarCommandForFault(issue.id, issue.side, exercise.id) : null);
 
   return (
     <section className="card overflow-hidden p-5">

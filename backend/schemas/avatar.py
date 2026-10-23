@@ -1,7 +1,11 @@
 """Pydantic schemas and kinematic safety validation for 3D avatar animation commands."""
 
+import json
 from typing import Any, Literal
+
 from pydantic import BaseModel, Field
+
+from config import get_settings
 
 BoneName = Literal[
     "Hips",
@@ -61,14 +65,15 @@ class KinematicClamper:
         "Spine": {"x": (-35.0, 45.0), "y": (-30.0, 30.0), "z": (-25.0, 25.0)},
         "Spine1": {"x": (-30.0, 35.0), "y": (-25.0, 25.0), "z": (-20.0, 20.0)},
         "Neck": {"x": (-40.0, 40.0), "y": (-50.0, 50.0), "z": (-30.0, 30.0)},
-        "LeftUpLeg": {"x": (-120.0, 30.0), "y": (-35.0, 35.0), "z": (-45.0, 40.0)},
-        "RightUpLeg": {"x": (-120.0, 30.0), "y": (-35.0, 35.0), "z": (-40.0, 45.0)},
+        "LeftUpLeg": {"x": (-130.0, 30.0), "y": (-35.0, 35.0), "z": (-50.0, 40.0)},
+        "RightUpLeg": {"x": (-130.0, 30.0), "y": (-35.0, 35.0), "z": (-40.0, 50.0)},
         "LeftLeg": {"x": (-5.0, 150.0), "y": (-15.0, 15.0), "z": (-15.0, 15.0)},
         "RightLeg": {"x": (-5.0, 150.0), "y": (-15.0, 15.0), "z": (-15.0, 15.0)},
-        "LeftArm": {"x": (-160.0, 90.0), "y": (-90.0, 90.0), "z": (-180.0, 45.0)},
-        "RightArm": {"x": (-160.0, 90.0), "y": (-90.0, 90.0), "z": (-45.0, 180.0)},
-        "LeftForeArm": {"x": (-5.0, 150.0), "y": (-20.0, 20.0), "z": (-20.0, 20.0)},
-        "RightForeArm": {"x": (-5.0, 150.0), "y": (-20.0, 20.0), "z": (-20.0, 20.0)},
+        "LeftArm": {"x": (-180.0, 90.0), "y": (-95.0, 95.0), "z": (-180.0, 45.0)},
+        "RightArm": {"x": (-180.0, 90.0), "y": (-95.0, 95.0), "z": (-45.0, 180.0)},
+        # Elbow flexion is negative X (the forearm swings forward)
+        "LeftForeArm": {"x": (-150.0, 5.0), "y": (-20.0, 20.0), "z": (-20.0, 20.0)},
+        "RightForeArm": {"x": (-150.0, 5.0), "y": (-20.0, 20.0), "z": (-20.0, 20.0)},
     }
 
     @classmethod
@@ -93,146 +98,19 @@ class KinematicClamper:
         return command
 
 
+def _load_canonical_corrections() -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, dict[str, Any]]]]:
+    """Corrective avatar rules shared with the frontend (exercises/avatar_corrections.json)."""
+    path = get_settings().exercises_path.parent / "avatar_corrections.json"
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    return data["faults"], data.get("exercise_overrides", {})
+
+
 # Canonical expert biomechanical corrective adjustments for exercise faults
-CANONICAL_AVATAR_CORRECTIONS: dict[str, dict[str, Any]] = {
-    "shallow_squat": {
-        "highlight_joints": ["LeftLeg", "RightLeg", "LeftUpLeg", "RightUpLeg"],
-        "actions": [
-            {
-                "bone_name": "LeftUpLeg",
-                "rotation_mode": "relative_offset",
-                "target_rotation": {"x": -20.0, "y": 0.0, "z": 0.0},
-                "duration_ms": 700,
-                "easing": "easeInOutQuad",
-            },
-            {
-                "bone_name": "RightUpLeg",
-                "rotation_mode": "relative_offset",
-                "target_rotation": {"x": -20.0, "y": 0.0, "z": 0.0},
-                "duration_ms": 700,
-                "easing": "easeInOutQuad",
-            },
-            {
-                "bone_name": "LeftLeg",
-                "rotation_mode": "relative_offset",
-                "target_rotation": {"x": 25.0, "y": 0.0, "z": 0.0},
-                "duration_ms": 700,
-                "easing": "easeInOutQuad",
-            },
-            {
-                "bone_name": "RightLeg",
-                "rotation_mode": "relative_offset",
-                "target_rotation": {"x": 25.0, "y": 0.0, "z": 0.0},
-                "duration_ms": 700,
-                "easing": "easeInOutQuad",
-            },
-        ],
-    },
-    "chest_forward": {
-        "highlight_joints": ["Spine", "Spine1"],
-        "actions": [
-            {
-                "bone_name": "Spine",
-                "rotation_mode": "relative_offset",
-                "target_rotation": {"x": -18.0, "y": 0.0, "z": 0.0},
-                "duration_ms": 650,
-                "easing": "easeOutCubic",
-            },
-            {
-                "bone_name": "Spine1",
-                "rotation_mode": "relative_offset",
-                "target_rotation": {"x": -10.0, "y": 0.0, "z": 0.0},
-                "duration_ms": 650,
-                "easing": "easeOutCubic",
-            },
-        ],
-    },
-    "hips_sagging": {
-        "highlight_joints": ["Hips", "Spine"],
-        "actions": [
-            {
-                "bone_name": "Hips",
-                "rotation_mode": "relative_offset",
-                "target_rotation": {"x": 15.0, "y": 0.0, "z": 0.0},
-                "duration_ms": 600,
-                "easing": "easeInOutQuad",
-            },
-            {
-                "bone_name": "Spine",
-                "rotation_mode": "relative_offset",
-                "target_rotation": {"x": -10.0, "y": 0.0, "z": 0.0},
-                "duration_ms": 600,
-                "easing": "easeInOutQuad",
-            },
-        ],
-    },
-    "shallow_push_up": {
-        "highlight_joints": ["LeftForeArm", "RightForeArm", "LeftArm", "RightArm"],
-        "actions": [
-            {
-                "bone_name": "LeftForeArm",
-                "rotation_mode": "relative_offset",
-                "target_rotation": {"x": 30.0, "y": 0.0, "z": 0.0},
-                "duration_ms": 600,
-                "easing": "easeInOutQuad",
-            },
-            {
-                "bone_name": "RightForeArm",
-                "rotation_mode": "relative_offset",
-                "target_rotation": {"x": 30.0, "y": 0.0, "z": 0.0},
-                "duration_ms": 600,
-                "easing": "easeInOutQuad",
-            },
-        ],
-    },
-    "arms_not_overhead": {
-        "highlight_joints": ["LeftArm", "RightArm"],
-        "actions": [
-            {
-                "bone_name": "LeftArm",
-                "rotation_mode": "relative_offset",
-                "target_rotation": {"x": 0.0, "y": 0.0, "z": -35.0},
-                "duration_ms": 500,
-                "easing": "easeOutCubic",
-            },
-            {
-                "bone_name": "RightArm",
-                "rotation_mode": "relative_offset",
-                "target_rotation": {"x": 0.0, "y": 0.0, "z": 35.0},
-                "duration_ms": 500,
-                "easing": "easeOutCubic",
-            },
-        ],
-    },
-    "feet_narrow": {
-        "highlight_joints": ["LeftUpLeg", "RightUpLeg"],
-        "actions": [
-            {
-                "bone_name": "LeftUpLeg",
-                "rotation_mode": "relative_offset",
-                "target_rotation": {"x": 0.0, "y": 0.0, "z": -15.0},
-                "duration_ms": 500,
-                "easing": "easeOutCubic",
-            },
-            {
-                "bone_name": "RightUpLeg",
-                "rotation_mode": "relative_offset",
-                "target_rotation": {"x": 0.0, "y": 0.0, "z": 15.0},
-                "duration_ms": 500,
-                "easing": "easeOutCubic",
-            },
-        ],
-    },
-    "partial_curl": {
-        "highlight_joints": ["LeftForeArm", "RightForeArm"],
-        "actions": [
-            {
-                "bone_name": "LeftForeArm",
-                "rotation_mode": "relative_offset",
-                "target_rotation": {"x": 35.0, "y": 0.0, "z": 0.0},
-                "duration_ms": 600,
-                "easing": "easeInOutQuad",
-            },
-        ],
-    },
-}
+CANONICAL_AVATAR_CORRECTIONS, EXERCISE_AVATAR_OVERRIDES = _load_canonical_corrections()
+
+
+def get_canonical_correction(exercise_id: str | None, fault_id: str) -> dict[str, Any] | None:
+    """The corrective rule for a fault, preferring an exercise-specific override."""
+    override = EXERCISE_AVATAR_OVERRIDES.get(exercise_id or "", {}).get(fault_id)
+    return override or CANONICAL_AVATAR_CORRECTIONS.get(fault_id)

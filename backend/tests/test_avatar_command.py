@@ -64,3 +64,32 @@ def test_unknown_fault_fallback():
     assert cmd.primary_fault == "non_existent_fault"
     assert len(cmd.avatar_actions) > 0
     assert cmd.avatar_actions[0].bone_name == "Spine"
+
+
+def test_every_exercise_fault_has_a_canonical_rule():
+    from services.exercises import load_exercises
+
+    for ex in load_exercises().values():
+        for fault in ex["faults"]:
+            cmd = cg.generate_avatar_command(ex, fault["id"], fault["cue"])
+            assert cmd.highlight_joints, (ex["id"], fault["id"])
+            assert cmd.avatar_actions, (ex["id"], fault["id"])
+            # The generic spine-only fallback must not be used for authored faults
+            assert cmd.highlight_joints != ["Spine"] or fault["id"] == "swinging", (ex["id"], fault["id"])
+
+
+def test_elbow_flexion_is_negative_and_survives_clamping():
+    ex = get_exercise("bicep_curl")
+    cmd = cg.generate_avatar_command(ex, "partial_curl", "Curl all the way up.")
+    elbows = [a for a in cmd.avatar_actions if a.bone_name.endswith("ForeArm")]
+    assert {a.bone_name for a in elbows} == {"LeftForeArm", "RightForeArm"}
+    assert all(a.target_rotation.x < -20 for a in elbows)
+
+
+def test_exercise_specific_override():
+    ex = get_exercise("front_raise")
+    cmd = cg.generate_avatar_command(ex, "raise_low", "Lift to shoulder height.")
+    left = next(a for a in cmd.avatar_actions if a.bone_name == "LeftArm")
+    assert left.target_rotation.x < 0  # flex forward, not abduct sideways
+    lateral = cg.generate_avatar_command(get_exercise("lateral_raise"), "raise_low", "Raise.")
+    assert next(a for a in lateral.avatar_actions if a.bone_name == "LeftArm").target_rotation.z < 0

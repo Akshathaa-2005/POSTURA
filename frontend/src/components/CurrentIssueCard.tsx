@@ -20,7 +20,7 @@ export default function CurrentIssueCard({ exercise, mirrored }: { exercise: Exe
     coachAvatarCmd && coachAvatarCmd.primary_fault === issue?.id
       ? coachAvatarCmd
       : issue
-        ? getAvatarCommandForFault(issue.id, issue.side)
+        ? getAvatarCommandForFault(issue.id, issue.side, exercise.id)
         : null;
 
   return (

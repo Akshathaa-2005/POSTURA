@@ -16,9 +16,9 @@ from config import get_settings
 from schemas.avatar import (
     AvatarCorrectionCommand,
     BoneTransform,
-    CANONICAL_AVATAR_CORRECTIONS,
     KinematicClamper,
     Vector3D,
+    get_canonical_correction,
 )
 
 log = logging.getLogger(__name__)
@@ -139,7 +139,7 @@ def generate_avatar_command(
     side: str | None = None,
 ) -> AvatarCorrectionCommand:
     """Produces a kinematically validated avatar command for the detected exercise fault."""
-    data = CANONICAL_AVATAR_CORRECTIONS.get(fault_id)
+    data = get_canonical_correction(exercise.get("id") if exercise else None, fault_id)
     if not data:
         # Default subtle posture adjustment on Spine
         data = {
