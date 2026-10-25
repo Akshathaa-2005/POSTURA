@@ -27,7 +27,7 @@ export const JOINT_TRIPLETS: Record<JointName, [number, number, number]> = {
 
 const JOINT_NAMES = Object.keys(JOINT_TRIPLETS) as JointName[];
 const JOINT_TYPES: JointType[] = ["shoulder", "elbow", "hip", "knee"];
-export const SIDED_METRICS: SidedMetric[] = [...JOINT_TYPES, "hands_overhead"];
+export const SIDED_METRICS: SidedMetric[] = [...JOINT_TYPES, "hands_overhead", "wrist_drift", "wrist_above_shoulder"];
 
 const SIDE_LM = {
   left: { shoulder: LM.LEFT_SHOULDER, elbow: LM.LEFT_ELBOW, wrist: LM.LEFT_WRIST, hip: LM.LEFT_HIP, knee: LM.LEFT_KNEE, ankle: LM.LEFT_ANKLE },
@@ -35,6 +35,39 @@ const SIDE_LM = {
 } as const;
 
 export const MIN_VISIBILITY = 0.5;
+/** Hip sag needs a floor direction: skip lines steeper than about 70° from horizontal. */
+const SAG_MIN_NORMAL_Y = 0.35;
+/** A far-side limb only counts for the knee metrics when it is detected this confidently (side view). */
+const FAR_SIDE_VISIBILITY = 0.85;
+
+/** Landmark indices of one body side, for the engine's "is the body in frame" check. */
+export const sideLandmarks = (side: Side) => SIDE_LM[side];
+/**
+ * MediaPipe still "detects" limbs that are cut off by the frame edge; a point past the sides or bottom is a guess.
+ * The top edge is more forgiving: hands raised overhead (presses, jumping jacks) legitimately leave the frame there,
+ * and their position is still well estimated from the arm.
+ */
+const FRAME_MARGIN = 0.02;
+const TOP_MARGIN = 0.3;
+/** Feet sit at the bottom edge of most webcam framings and are still tracked a little past it. */
+const ANKLE_BOTTOM_MARGIN = 0.1;
+
+/** A landmark that is confidently detected and actually inside the camera frame. */
+export function usable(p: Landmark | undefined, bottomMargin = FRAME_MARGIN): p is Landmark {
+  return (
+    !!p &&
+    (p.visibility ?? 1) >= MIN_VISIBILITY &&
+    p.x >= -FRAME_MARGIN &&
+    p.x <= 1 + FRAME_MARGIN &&
+    p.y >= -TOP_MARGIN &&
+    p.y <= 1 + bottomMargin
+  );
+}
+
+/** `usable` for landmark `index`, which lets ankles sit slightly further past the bottom edge than other joints. */
+export function usableAt(lm: Landmark[], index: number): boolean {
+  return usable(lm[index], index === LM.LEFT_ANKLE || index === LM.RIGHT_ANKLE ? ANKLE_BOTTOM_MARGIN : FRAME_MARGIN);
+}
 
 export function isSided(metric: MetricName): metric is SidedMetric {
   return (SIDED_METRICS as string[]).includes(metric);
@@ -63,7 +96,7 @@ export function computeJointAngles(landmarks: Landmark[], width: number, height:
   const angles: JointAngles = {};
   for (const joint of JOINT_NAMES) {
     const pts = JOINT_TRIPLETS[joint].map((i) => landmarks[i]);
-    if (pts.some((p) => !p || (p.visibility ?? 1) < MIN_VISIBILITY)) continue;
+    if (!JOINT_TRIPLETS[joint].every((i) => usableAt(landmarks, i))) continue;
     angles[joint] = computeAngle(pts[0], pts[1], pts[2], width, height);
   }
   return angles;
@@ -72,10 +105,23 @@ export function computeJointAngles(landmarks: Landmark[], width: number, height:
 /** Mean visibility of one side's limb landmarks — used to pick the side facing the camera. */
 export function sideVisibility(landmarks: Landmark[], side: Side): number {
   const idx = Object.values(SIDE_LM[side]);
-  return idx.reduce((s, i) => s + (landmarks[i]?.visibility ?? 0), 0) / idx.length;
+  return idx.reduce((s, i) => s + (usableAt(landmarks, i) ? landmarks[i].visibility ?? 0 : 0), 0) / idx.length;
 }
 
 // ---- Metrics --------------------------------------------------------------------
+
+/** The side whose listed landmarks are all usable, preferring the one detected most confidently. */
+function bestSideOf(lm: Landmark[], sides: Side[], pick: (side: Side) => number[]): Side | undefined {
+  let best: Side | undefined;
+  let bestScore = -1;
+  for (const sd of sides) {
+    const idx = pick(sd);
+    if (!idx.every((i) => usableAt(lm, i))) continue;
+    const score = idx.reduce((t, i) => t + (lm[i].visibility ?? 1), 0) / idx.length;
+    if (score > bestScore) [best, bestScore] = [sd, score];
+  }
+  return best;
+}
 
 export interface FrameMetrics {
   sided: Record<SidedMetric, Partial<Record<Side, number>>>;
@@ -93,12 +139,12 @@ export function computeMetrics(
   angles: JointAngles,
   sides: Side[],
 ): FrameMetrics {
-  const visible = (i: number) => !!lm[i] && (lm[i].visibility ?? 1) >= MIN_VISIBILITY;
+  const visible = (i: number) => usableAt(lm, i);
   const px = (i: number): Pt => ({ x: lm[i].x * width, y: lm[i].y * height });
   const mid = (a: Pt, b: Pt): Pt => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
   const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
 
-  const sided = { shoulder: {}, elbow: {}, hip: {}, knee: {}, hands_overhead: {} } as FrameMetrics["sided"];
+  const sided = { shoulder: {}, elbow: {}, hip: {}, knee: {}, hands_overhead: {}, wrist_drift: {}, wrist_above_shoulder: {} } as FrameMetrics["sided"];
   const global: FrameMetrics["global"] = {};
 
   for (const side of sides) {
@@ -106,8 +152,16 @@ export function computeMetrics(
       const a = angles[`${side}_${type}` as JointName];
       if (a !== undefined) sided[type][side] = a;
     }
-    // Wrist height above the nose, in torso lengths (+ = hand above head).
     const s = SIDE_LM[side];
+    // Where the wrist is relative to the shoulder, in arm lengths: tells a press going up from one going forward.
+    if (visible(s.shoulder) && visible(s.elbow) && visible(s.wrist)) {
+      const arm = dist(px(s.shoulder), px(s.elbow)) + dist(px(s.elbow), px(s.wrist));
+      if (arm > 1) {
+        sided.wrist_drift[side] = Math.abs(px(s.wrist).x - px(s.shoulder).x) / arm;
+        sided.wrist_above_shoulder[side] = (px(s.shoulder).y - px(s.wrist).y) / arm;
+      }
+    }
+    // Wrist height above the nose, in torso lengths (+ = hand above head).
     if (visible(LM.NOSE) && visible(s.wrist) && visible(s.shoulder) && visible(s.hip)) {
       const torso = dist(px(s.shoulder), px(s.hip));
       if (torso > 0) sided.hands_overhead[side] = (px(LM.NOSE).y - px(s.wrist).y) / torso;
@@ -126,16 +180,41 @@ export function computeMetrics(
   }
 
   // Hip sag: how far the hip sits below (+) or above (−) the shoulder→ankle line, as % of body length.
-  // Only meaningful when the body is roughly horizontal (plank / push-up).
-  const sagSide = sides.find((sd) => [SIDE_LM[sd].shoulder, SIDE_LM[sd].hip, SIDE_LM[sd].ankle].every(visible));
+  // Measured against the line's normal that points towards the floor (image-down), so it also works when the body is
+  // tilted (side plank seen from the front). Not measurable when the line is nearly vertical: "down" is then ambiguous.
+  const sagSide = bestSideOf(lm, sides, (sd) => [SIDE_LM[sd].shoulder, SIDE_LM[sd].hip, SIDE_LM[sd].ankle]);
   if (sagSide) {
     const S = px(SIDE_LM[sagSide].shoulder);
     const H = px(SIDE_LM[sagSide].hip);
     const A = px(SIDE_LM[sagSide].ankle);
-    if (Math.abs(A.x - S.x) > Math.abs(A.y - S.y)) {
-      const lineY = S.y + ((A.y - S.y) * (H.x - S.x)) / (A.x - S.x);
-      global.hip_sag = ((H.y - lineY) / dist(S, A)) * 100;
+    const len = dist(S, A);
+    if (len > 1) {
+      const ux = (A.x - S.x) / len;
+      const uy = (A.y - S.y) / len;
+      const down = Math.abs(ux); // y-component of the line's floor-facing normal
+      if (down >= SAG_MIN_NORMAL_Y) {
+        const sign = ux >= 0 ? 1 : -1; // flips the normal (−uy, ux) so that it points image-down
+        const offset = (H.x - S.x) * (-uy * sign) + (H.y - S.y) * (ux * sign);
+        // Within 45° of horizontal this is the hip's vertical offset from the line; steeper, it stays continuous.
+        global.hip_sag = (offset / Math.max(down, Math.SQRT1_2) / len) * 100;
+      }
     }
+  }
+
+  // View ratio: shoulder width ÷ torso length. About 0.8 facing the camera, near 0 when seen from the side.
+  // Unmeasured (and so never blocks anything) unless both shoulders and at least one hip are clearly visible.
+  const hipsSeen = [LM.LEFT_HIP, LM.RIGHT_HIP].filter(visible);
+  if (visible(LM.LEFT_SHOULDER) && visible(LM.RIGHT_SHOULDER) && hipsSeen.length) {
+    const shoulderMid = mid(px(LM.LEFT_SHOULDER), px(LM.RIGHT_SHOULDER));
+    const hipMid = hipsSeen.length === 2 ? mid(px(LM.LEFT_HIP), px(LM.RIGHT_HIP)) : px(hipsSeen[0]);
+    const torso = dist(shoulderMid, hipMid);
+    if (torso > 1) global.view_ratio = dist(px(LM.LEFT_SHOULDER), px(LM.RIGHT_SHOULDER)) / torso;
+  } else if (visible(LM.LEFT_SHOULDER) && visible(LM.RIGHT_SHOULDER) && visible(LM.NOSE)) {
+    // Hips are out of frame (webcam close up): use the neck length instead. Measured on a real webcam, facing the
+    // camera gives shoulder width ≈ 3 × shoulder-midpoint-to-nose distance, which is a ratio of 0.8 on the torso
+    // scale above, so divide by 3.75 × neck to keep the same scale (and the same view thresholds).
+    const neck = dist(mid(px(LM.LEFT_SHOULDER), px(LM.RIGHT_SHOULDER)), px(LM.NOSE));
+    if (neck > 1) global.view_ratio = dist(px(LM.LEFT_SHOULDER), px(LM.RIGHT_SHOULDER)) / (3.75 * neck);
   }
 
   // Stance width: ankle spread relative to shoulder width (front view).
@@ -144,8 +223,14 @@ export function computeMetrics(
     if (shoulders > 1) global.stance_width = Math.abs(px(LM.LEFT_ANKLE).x - px(LM.RIGHT_ANKLE).x) / shoulders;
   }
 
-  // Most-bent / straightest knee among visible legs (both legs matter in a lunge, whichever faces the camera).
-  const knees = [angles.left_knee, angles.right_knee].filter((a): a is number => a !== undefined);
+  // Most-bent / straightest knee among the judged side(s). A lunge uses both legs, but in side view the far leg is
+  // mostly guessed, so it only counts when it is detected confidently.
+  const kneeSides = (["left", "right"] as Side[]).filter((sd) => {
+    if (sides.includes(sd)) return true;
+    const far = Object.values(SIDE_LM[sd]).filter((i) => i === SIDE_LM[sd].hip || i === SIDE_LM[sd].knee || i === SIDE_LM[sd].ankle);
+    return far.every((i) => visible(i) && (lm[i].visibility ?? 0) >= FAR_SIDE_VISIBILITY);
+  });
+  const knees = kneeSides.map((sd) => angles[`${sd}_knee` as JointName]).filter((a): a is number => a !== undefined);
   if (knees.length) {
     global.knee_min = Math.min(...knees);
     global.knee_max = Math.max(...knees);
@@ -224,6 +309,8 @@ export const METRIC_REGION: Record<MetricName, BodyRegion> = {
   shoulder: "upper",
   elbow: "upper",
   hands_overhead: "upper",
+  wrist_drift: "upper",
+  wrist_above_shoulder: "upper",
   hip: "core",
   torso_lean: "core",
   hip_sag: "core",
@@ -233,6 +320,7 @@ export const METRIC_REGION: Record<MetricName, BodyRegion> = {
   knee_track: "lower",
   knee_lift_max: "lower",
   stance_width: "lower",
+  view_ratio: "core",
 };
 
 /** Landmarks to highlight on the skeleton for a metric. */
@@ -249,6 +337,8 @@ export function metricLandmarks(metric: MetricName, sides: Side[]): number[] {
     case "knee":
       return on((s) => s.knee);
     case "hands_overhead":
+    case "wrist_drift":
+    case "wrist_above_shoulder":
       return on((s) => s.wrist);
     case "knee_min":
     case "knee_max":
@@ -261,5 +351,7 @@ export function metricLandmarks(metric: MetricName, sides: Side[]): number[] {
       return on((s) => s.hip);
     case "stance_width":
       return on((s) => s.ankle, both);
+    case "view_ratio":
+      return [LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER, LM.LEFT_HIP, LM.RIGHT_HIP];
   }
 }

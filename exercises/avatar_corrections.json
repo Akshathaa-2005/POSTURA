@@ -393,6 +393,54 @@
     }
    ]
   },
+  "hands_not_up": {
+   "highlight_joints": [
+    "LeftArm",
+    "RightArm"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftArm",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightArm",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "press_drift": {
+   "highlight_joints": [
+    "LeftArm",
+    "RightArm"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftArm",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightArm",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
   "pressing_forward": {
    "highlight_joints": [
     "LeftArm",

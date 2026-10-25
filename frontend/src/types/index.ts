@@ -20,7 +20,11 @@ export type JointAngles = Partial<Record<JointName, number>>;
  * Measurements a fault or rep can be based on.
  * Sided metrics are evaluated per body side (front view: both; side view: the side facing the camera).
  */
-export type SidedMetric = JointType | "hands_overhead";
+/**
+ * `wrist_drift`: how far the wrist sits to the side of the shoulder, as a share of arm length (0 = directly above or
+ * below it). `wrist_above_shoulder`: wrist height over the shoulder in arm lengths (+ above, − below).
+ */
+export type SidedMetric = JointType | "hands_overhead" | "wrist_drift" | "wrist_above_shoulder";
 export type GlobalMetric =
   | "torso_lean"
   | "hip_sag"
@@ -28,7 +32,8 @@ export type GlobalMetric =
   | "knee_min"
   | "knee_max"
   | "knee_track"
-  | "knee_lift_max";
+  | "knee_lift_max"
+  | "view_ratio";
 export type MetricName = SidedMetric | GlobalMetric;
 
 export interface RepConfig {
@@ -39,6 +44,10 @@ export interface RepConfig {
   start_threshold: number;
   /** Value that must be reached for the rep to count. */
   peak_threshold: number;
+  /** Where the body must be before the rep starts (e.g. hands at the shoulders); a rep from elsewhere isn't counted. */
+  start_check?: SetupRule;
+  /** Faster than this is a bounce, not a controlled rep. Defaults to 400 ms (none for cardio). */
+  min_duration_ms?: number;
 }
 
 export interface FaultRule {
@@ -80,6 +89,12 @@ export interface Exercise {
   description: string;
   camera_setup: string;
   view: "front" | "side";
+  /**
+   * How much of the body must be in frame before reps count. "full" (default): shoulders to ankles, because the
+   * exercise is judged on the legs or whole-body line. "upper": shoulders, elbows and wrists only, so it can be
+   * done seated or with the legs out of frame.
+   */
+  body_scope?: "full" | "upper";
   /** "reps" counts repetitions; "hold" times how long the setup position is held with good form. */
   mode?: "reps" | "hold";
   /** Hold exercises: target seconds. */
@@ -112,7 +127,7 @@ export interface ScoreBreakdown {
 }
 
 export interface FormIssue {
-  /** Fault id, or "setup" when the user isn't in the starting position. */
+  /** Fault id, or a synthetic one: "setup", "view", "framed", "unseen", "lost", "rushed", "stalled", "start". */
   id: string;
   label: string;
   message: string;
@@ -133,6 +148,18 @@ export interface RepWindow {
   context: Float64Array;
 }
 
+/** Rep problems that aren't faults in exercises.json (framing, tempo). */
+export type RepNoteId = "unseen" | "lost" | "rushed" | "stalled" | "start";
+
+export interface RepQuality {
+  /** Time from leaving the start position to returning to it. */
+  durationMs: number;
+  /** Direction changes beyond the one natural turn at the peak (stalls, bounces, stop-and-restart). */
+  reversals: number;
+  /** 0-100; drops for each direction change. */
+  smoothness: number;
+}
+
 export interface RepEvent {
   /** "partial" = not counted: the rep fell short or had a major fault. */
   type: "rep" | "partial";
@@ -143,6 +170,10 @@ export interface RepEvent {
   faults: FaultHit[];
   /** Why a rep wasn't counted when no fault explains it. */
   note?: string;
+  /** Which kind of problem `note` describes; the coach speaks it under this id. */
+  noteId?: RepNoteId;
+  /** How the rep was performed, beyond joint angles. */
+  quality?: RepQuality;
   /** The rep's skeleton, when it could be captured cleanly. */
   window?: RepWindow;
 }

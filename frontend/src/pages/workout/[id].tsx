@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { GetStaticPaths, GetStaticProps } from "next";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -7,10 +7,11 @@ import DashboardPanel from "@/components/DashboardPanel";
 import Layout from "@/components/Layout";
 import VideoPoseContainer from "@/components/VideoPoseContainer";
 import WorkoutHUD from "@/components/WorkoutHUD";
+import { speakLocalCue, useCoachVoice, useVoice } from "@/hooks/useCoachVoice";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useWorkoutState } from "@/hooks/useWorkoutState";
-import type { Exercise } from "@/types";
+import type { Exercise, FormIssue } from "@/types";
 import type { Landmark } from "@/types/mediapipe";
 import { getAvatarCommandForFault } from "@/utils/avatarCorrections";
 import { EXERCISES, getExercise } from "@/utils/exercises";
@@ -43,13 +44,22 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
   const activeCommand =
     coach.avatarCommand || (issue ? getAvatarCommandForFault(issue.id, issue.side, exercise.id) : null);
 
-  const isSpeaking = Boolean(coach.voice && coach.correction && Date.now() - coach.correction.at < 5000);
+  useCoachVoice(); // one voice player for both layouts
+  const isSpeaking = useVoice((s) => s.speaking);
 
   useEffect(() => {
     reset(exercise.id, exercise.rep_target);
   }, [exercise, sessionKey, reset]);
 
   const { sendRep, sendIssue, sendPraise } = useWebSocket({ exerciseId: exercise.id, active: cameraOn, sessionKey });
+  // Online, the backend phrases, paces and speaks each cue; offline, this device speaks the on-screen cue itself.
+  const onCoachIssue = useCallback(
+    (cue: FormIssue) => {
+      if (useWorkoutState.getState().coach.connection === "online") sendIssue(cue);
+      else speakLocalCue(cue.message, cue.id);
+    },
+    [sendIssue],
+  );
 
   const start = () => {
     setPaused(false);
@@ -104,12 +114,11 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
           {/* 50/50 Split View: Left = User Video Feed, Right = 3D Humanoid Avatar */}
           <section
             aria-label="Workout observation stage"
-            className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6 items-stretch w-full"
-            style={{ minHeight: "560px" }}
+            className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6 items-start w-full"
           >
             {/* Left Column (50% on md+): User Video & Real-time Pose Skeleton */}
-            <div className="flex flex-col h-full min-w-0">
-              <div className="mb-2 flex items-center justify-between px-1">
+            <div className="flex flex-col min-w-0">
+              <div className="mb-2 flex h-6 items-center justify-between px-1">
                 <span className="eyebrow flex items-center gap-2">
                   <span className={`h-2.5 w-2.5 rounded-full ${cameraOn ? "bg-good animate-pulse" : "bg-stone/40"}`} />
                   You · Video Feed
@@ -118,7 +127,7 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
                   {exercise.view === "side" ? "Side Angle" : "Front Angle"}
                 </span>
               </div>
-              <div className="flex-1 h-full min-h-[380px]">
+              <div>
                 <VideoPoseContainer
                   exercise={exercise}
                   cameraOn={cameraOn}
@@ -128,7 +137,7 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
                   sessionKey={sessionKey}
                   onStart={start}
                   onRepEvent={sendRep}
-                  onCoachIssue={sendIssue}
+                  onCoachIssue={onCoachIssue}
                   onPraise={sendPraise}
                   liveLandmarksRef={liveLandmarksRef}
                   liveAspectRef={liveAspectRef}
@@ -137,8 +146,8 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
             </div>
 
             {/* Right Column (50% on md+): 3D Humanoid Avatar Coach */}
-            <div className="flex flex-col h-full min-w-0">
-              <div className="mb-2 flex items-center justify-between px-1">
+            <div className="flex flex-col min-w-0">
+              <div className="mb-2 flex h-6 items-center justify-between px-1">
                 <span className="eyebrow flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-forest" />
                   Postura · 3D Humanoid Coach
@@ -147,12 +156,13 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
                   {activeCommand ? `Correcting: ${issue?.label || activeCommand.primary_fault}` : "Target Alignment"}
                 </span>
               </div>
-              <div className="card p-2 flex-1 flex flex-col h-full min-h-[380px] overflow-hidden">
+              <div className="card p-2 overflow-hidden">
                 <AvatarCoach3D
                   command={activeCommand}
                   exerciseId={exercise.id}
                   defaultView={exercise.view === "side" ? "side" : "perspective"}
-                  className="w-full h-full flex-1"
+                  className="w-full"
+                  stage="video"
                   autoPlay
                   isSpeaking={isSpeaking}
                   liveLandmarksRef={liveLandmarksRef}
@@ -189,7 +199,7 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
             sessionKey={sessionKey}
             onStart={start}
             onRepEvent={sendRep}
-            onCoachIssue={sendIssue}
+            onCoachIssue={onCoachIssue}
             onPraise={sendPraise}
             liveLandmarksRef={liveLandmarksRef}
           />

@@ -14,7 +14,8 @@ Protocol (JSON messages):
   server → client
     {"type": "session_started", "session_id", "exercise_id", "llm", "tts"}
     {"type": "correction", "id", "fault_id", "label", "status", "text", "source"}
-    {"type": "voice", "id", "url", "text", "kind": "correction"|"praise"|"intro"}
+    {"type": "voice", "id", "url" | null, "text", "kind": "correction"|"praise"|"intro"}
+                                      url is null when this machine can't synthesise speech: the browser speaks `text`
     {"type": "session_saved", "session_id"}
     {"type": "error", "message"}
 """
@@ -39,7 +40,7 @@ from services.correction_generator import (
     generate_correction,
     ollama_available,
 )
-from services.exercises import fault_cue, get_exercise, get_fault
+from services.exercises import SYNTHETIC_FAULTS, fault_cue, get_exercise, get_fault
 from services.tts_service import text_to_speech, tts_available
 
 log = logging.getLogger(__name__)
@@ -137,6 +138,8 @@ class CoachSession:
         if fault is None:
             await self.send({"type": "error", "message": f"Unknown fault for {self.exercise['id']}: {msg.fault_id}"})
             return
+        if msg.fault_id in SYNTHETIC_FAULTS and msg.message and msg.message.strip():
+            fault = {**fault, "cue": msg.message.strip()}  # speak what the screen shows
         if self._may_speak(msg.fault_id, msg.status):
             self._spawn(self._deliver_correction(fault, msg))
 
@@ -234,8 +237,10 @@ class CoachSession:
     async def _speak(self, text: str, kind: VoiceKind, cid: int | None = None, release: bool = False) -> None:
         try:
             audio = await text_to_speech(text)
-            if audio:
-                await self.send({"type": "voice", "id": cid or self._next_id(), "url": f"/audio/{audio}", "text": text, "kind": kind})
+            # No audio (TTS off, no speech engine on this OS, or synthesis failed): still send the line so the browser
+            # can speak it with its own voices, which exist on every OS.
+            url = f"/audio/{audio}" if audio else None
+            await self.send({"type": "voice", "id": cid or self._next_id(), "url": url, "text": text, "kind": kind})
         except (WebSocketDisconnect, RuntimeError):
             pass
         finally:

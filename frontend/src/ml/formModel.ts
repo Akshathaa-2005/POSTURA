@@ -85,8 +85,15 @@ export class FormModel {
 
 let loading: Promise<FormModel | null> | null = null;
 
+/**
+ * The ST-GCN form model is switched off until it has been trained on real, labelled reps (see ARCHITECTURE.md §6).
+ * While false, nothing is fetched (no /models/form 404) and the rules alone decide reps and cues.
+ */
+export const FORM_MODEL_ENABLED = false;
+
 /** Loads the model from /models/form if one has been placed there; resolves null (never throws) if not. */
 export function loadFormModel(): Promise<FormModel | null> {
+  if (!FORM_MODEL_ENABLED) return Promise.resolve(null);
   loading ??= (async () => {
     try {
       const metaRes = await fetch(`${BASE}/model_meta.json`);

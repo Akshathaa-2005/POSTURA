@@ -243,6 +243,7 @@
     "description": "Curl the hands toward the shoulders with the elbows pinned to your sides.",
     "camera_setup": "Turn sideways to the camera, upper body and hips in frame",
     "view": "side",
+    "body_scope": "upper",
     "rep": {
       "metric": "elbow",
       "direction": "decrease",
@@ -304,11 +305,18 @@
     "description": "Press the hands from shoulder height to straight overhead, then lower with control.",
     "camera_setup": "Turn sideways to the camera, upper body and hips in frame",
     "view": "side",
+    "body_scope": "upper",
     "rep": {
       "metric": "elbow",
       "direction": "increase",
       "start_threshold": 100,
-      "peak_threshold": 160
+      "peak_threshold": 160,
+      "start_check": {
+        "metric": "wrist_above_shoulder",
+        "op": ">",
+        "value": -0.3,
+        "cue": "Start with your hands at shoulder height, then press up"
+      }
     },
     "faults": [
       {
@@ -342,6 +350,26 @@
         "warn": 10,
         "bad": 18,
         "cue": "Brace your core and keep your ribs down — don't lean back"
+      },
+      {
+        "id": "hands_not_up",
+        "label": "Hands not overhead",
+        "when": "rep",
+        "metric": "wrist_above_shoulder",
+        "agg": "max",
+        "op": "<",
+        "warn": 0.88,
+        "bad": 0.72,
+        "cue": "Press your hands up above your head — straight arms out in front don't count"
+      },
+      {
+        "id": "press_drift",
+        "label": "Pressing out front",
+        "when": "peak",
+        "metric": "wrist_drift",
+        "op": ">",
+        "warn": 0.45,
+        "cue": "Press straight up — keep your hands over your shoulders, not out in front"
       }
     ],
     "correction_tips": [
@@ -601,7 +629,7 @@
     "setup": {
       "metric": "torso_lean",
       "op": ">",
-      "value": 50,
+      "value": 35,
       "cue": "Lie on your side and lift onto your forearm, body in one line"
     },
     "faults": [
@@ -698,6 +726,7 @@
     "description": "Raise your arms out to the sides to shoulder height with a soft bend in the elbows.",
     "camera_setup": "Face the camera, full body in frame",
     "view": "front",
+    "body_scope": "upper",
     "rep": {
       "metric": "shoulder",
       "direction": "increase",
@@ -762,6 +791,7 @@
     "description": "Raise your arms straight in front of you to shoulder height, then lower with control.",
     "camera_setup": "Turn sideways to the camera, upper body and hips in frame",
     "view": "side",
+    "body_scope": "upper",
     "rep": {
       "metric": "shoulder",
       "direction": "increase",
@@ -823,6 +853,7 @@
     "description": "With upper arms beside your ears, lower the hands behind your head and extend back up.",
     "camera_setup": "Turn sideways to the camera, upper body and hips in frame",
     "view": "side",
+    "body_scope": "upper",
     "setup": {
       "metric": "shoulder",
       "op": ">",

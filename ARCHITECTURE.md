@@ -67,17 +67,33 @@ Vitest 3.2.7.
 1. Smooth landmarks and angles with an exponential moving average (`LANDMARK_SMOOTHING`, `METRIC_SMOOTHING`).
 2. Pick the judged side. Front-view exercises use both sides. Side-view exercises use the side closer to the camera,
    because MediaPipe mostly guesses the far limbs.
-3. Check the setup gate (for example, a push-up must be in a plank). Nothing counts until it passes.
+3. Check the camera angle and the setup gate. Shoulder width relative to torso length tells whether you face the camera
+   (about 0.8) or are side-on (near 0). Side-view exercises are not judged while you face the camera, and front-view ones
+   not while you are side-on; the card says to turn. Then the exercise's own setup (for example, a push-up must be in a
+   plank). Nothing counts until both pass. If the angle can't be measured (the far shoulder is hidden) it never blocks.
 4. Feed the rep metric to `RepCounter`. On a candidate rep, `judgeRep` decides the outcome.
 5. Evaluate live faults. A fault shows only after it has held for 400 ms and clears after 700 ms.
 6. Choose one cue to show: major before minor, live before last-rep. Mark it for speech only when it is new.
 
-**Rep acceptance** (`judgeRep`): a rep counts only if all three hold.
+**Rep acceptance** (`judgeRep`): a rep counts only if all of these hold.
 - It reached the count line (`rep.peak_threshold`).
 - No `bad` fault was found on the rep, either from its min or max values or from a live `bad` fault held for 3+ frames.
 - The body stayed in frame for at least 70% of the rep.
+- It wasn't a bounce: at least 400 ms (strength, core and mobility; cardio is exempt, or set `rep.min_duration_ms`).
+- It started from the right place, if the exercise sets `rep.start_check` (the shoulder press needs the hands at shoulder
+  height, judged from about 300 ms before the movement begins).
+- It was one smooth motion: fewer than 2 extra direction changes of 30% of the range (progress is smoothed first, so landmark jitter doesn't count).
 
-Anything else is reported as "Not counted" with a reason. Rules are in `exercises.json`. Each fault has `warn` and `bad`
+Path checks are warnings, never reasons to reject: a `when: "peak"` rule on `wrist_drift` or `wrist_above_shoulder` (the
+shoulder press uses `press_drift`) tells a press going up from one going forward, and works without the hips in frame.
+
+Before any of that, the exercise's `body_scope` decides what must be in frame: `upper` (shoulders, elbows, wrists; curls and
+presses can be done seated) or `full` (shoulders to ankles). A landmark outside the frame is a guess and counts as unseen,
+except above the top edge (hands overhead) and just below the bottom (ankles). Missing parts only pause counting after
+about 0.25 s.
+
+Anything else is reported as "Not counted" with a reason. Synthetic problems have their own cue ids (`framed`, `unseen`,
+`lost`, `rushed`, `stalled`), and the browser sends the wording it shows so the spoken cue matches the screen. Rules are in `exercises.json`. Each fault has `warn` and `bad`
 thresholds. `npm test` checks that the thresholds are ordered correctly for every exercise.
 
 **Exercise types:** `mode: "reps"` (default) counts repetitions. `mode: "hold"` times a position (plank, wall sit,
@@ -144,6 +160,7 @@ was considered and not used. **Optional** means it is supported but not on by de
 | Tool | Status | Where | Notes |
 |---|---|---|---|
 | pyttsx3 (system voices: NSSpeechSynthesizer on macOS, SAPI5, eSpeak) | In use | `tts_worker.py` | Runs in a subprocess because the macOS driver is not thread-safe. Audio saved as WAV under `backend/static/audio`; files older than 6 hours are deleted. |
+| Browser speech synthesis (`window.speechSynthesis`) | In use | `useCoachVoice` | The fallback on every OS. The server sends each spoken line with `url: null` when it can't synthesise (no eSpeak on Linux, TTS off, a failure), and the browser speaks the text. Offline, with no backend, the browser speaks the on-screen cue itself, paced like the server (6 s between cues, 15 s per fault). One player serves both workout layouts. |
 | Cloud TTS | Not used | | Not needed while the local voice works. |
 
 ### Image generation (exercise guide photos)

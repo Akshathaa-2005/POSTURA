@@ -27,6 +27,7 @@ export interface CoachCorrection {
 
 export interface CoachVoice {
   id: number;
+  /** Audio file from the server, or "" when the browser should speak `text` itself. */
   url: string;
   text: string;
 }

@@ -30,6 +30,12 @@ interface Props {
   liveAspectRef?: React.MutableRefObject<number>;
   cameraOn?: boolean;
   mirrored?: boolean;
+  /**
+   * "fill" (default) stretches to its parent with the controls below the viewport.
+   * "video" is a 16:9 stage like the camera feed, with the controls laid over its bottom edge, so the two sit side by side
+   * at exactly the same size.
+   */
+  stage?: "fill" | "video";
 }
 
 interface ActiveTween {
@@ -56,7 +62,9 @@ export default function AvatarCoach3D({
   liveAspectRef,
   cameraOn = false,
   mirrored = true,
+  stage = "fill",
 }: Props) {
+  const video = stage === "video";
   const mountRef = useRef<HTMLDivElement>(null);
   const [viewAngle, setViewAngle] = useState<"perspective" | "side" | "front">(defaultView);
   const [visMode, setVisMode] = useState<AvatarVisualizationMode>("rig"); // defaults to Figure 3 (Kinematic Rig)
@@ -969,9 +977,16 @@ export default function AvatarCoach3D({
   }, [command, autoPlay, controlMode, applyCommand]);
 
   return (
-    <div className={`relative flex flex-col h-full w-full rounded-2xl bg-[#0a0c10] border border-slate/20 overflow-hidden ${className}`}>
+    <div
+      className={`relative flex flex-col w-full rounded-2xl bg-[#0a0c10] overflow-hidden ${
+        video ? "" : "h-full border border-slate/20"
+      } ${className}`}
+    >
       {/* 3D Viewport */}
-      <div ref={mountRef} className="relative flex-1 w-full min-h-[380px] cursor-grab active:cursor-grabbing">
+      <div
+        ref={mountRef}
+        className={`relative w-full cursor-grab active:cursor-grabbing ${video ? "aspect-video" : "flex-1 min-h-[380px]"}`}
+      >
         {/* Status indicator badge */}
         <div className="absolute top-3 left-3 z-10 flex items-center gap-2 rounded-full bg-[#10141b]/85 px-3 py-1 text-[11px] border border-slate-700/50 backdrop-blur-md">
           {controlMode === "mimic" ? (
@@ -999,7 +1014,7 @@ export default function AvatarCoach3D({
 
         {/* Coach verbal cue + phase label overlay — shown during replay demos */}
         {coachCue && (
-          <div className="absolute bottom-3 left-3 right-3 z-20 pointer-events-none">
+          <div className={`absolute left-3 right-3 z-20 pointer-events-none ${video ? "bottom-16" : "bottom-3"}`}>
             {replayPhaseLabel && (
               <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-blue-600/80 px-2.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm border border-blue-400/30">
                 <span className="h-1.5 w-1.5 rounded-full bg-blue-200 animate-pulse" />
@@ -1014,7 +1029,11 @@ export default function AvatarCoach3D({
       </div>
 
       {/* Aesthetic SMPL Model Control Bar */}
-      <div className="flex flex-wrap items-center justify-between border-t border-slate/20 bg-[#10141b]/90 px-4 py-2.5 text-xs text-slate-300 backdrop-blur-md">
+      <div
+        className={`flex flex-wrap items-center justify-between border-t border-slate/20 bg-[#10141b]/90 px-4 py-2.5 text-xs text-slate-300 backdrop-blur-md ${
+          video ? "absolute inset-x-0 bottom-0 z-20" : ""
+        }`}
+      >
         {/* Tracking Mode Switcher (Mimic Live vs Coach Demo) */}
         <div className="flex items-center gap-1.5 border-r border-slate-700/60 pr-2">
           <button

@@ -34,6 +34,10 @@ describe("exercise catalog", () => {
       if (!ex.rep) return;
       const { direction, start_threshold: start, peak_threshold: peak } = ex.rep;
       expect(METRICS).toContain(ex.rep.metric);
+      if (ex.rep.start_check) {
+        expect(METRICS).toContain(ex.rep.start_check.metric);
+        expect(ex.rep.start_check.cue.trim()).not.toBe("");
+      }
       expect(direction === "decrease" ? peak < start : peak > start).toBe(true);
     });
 

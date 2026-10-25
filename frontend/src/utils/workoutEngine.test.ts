@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Landmark } from "@/types/mediapipe";
 import type { FormIssue, RepEvent } from "@/types";
 import { getExercise } from "./exercises";
-import { computeAngle } from "./poseValidation";
+import { computeAngle, computeJointAngles, computeMetrics } from "./poseValidation";
 import { WorkoutEngine, type EngineSnapshot } from "./workoutEngine";
 
 const W = 1000;
@@ -24,7 +24,7 @@ function landmarks(points: Record<number, P>, visibility: Record<number, number>
 }
 
 /** Side-view standing/squatting figure facing +x. `knee` is the knee angle, `lean` the torso lean. */
-function sidePose({ knee = 175, lean = 5, elbow = 170, shoulder = 10, farVisibility = 0.2, farGarbage = false } = {}) {
+function sidePose({ knee = 175, lean = 5, elbow = 170, shoulder = 10, farVisibility = 0.2, farGarbage = false, split = 0 } = {}) {
   const s = (180 - knee) / 2;
   const A: P = [500, 900];
   const K = add(A, [200 * Math.sin(rad(s)), -200 * Math.cos(rad(s))]);
@@ -41,6 +41,11 @@ function sidePose({ knee = 175, lean = 5, elbow = 170, shoulder = 10, farVisibil
   const far: Record<number, P> = farGarbage
     ? { 12: [100, 100], 14: [900, 120], 16: [120, 880], 24: [880, 300], 26: [100, 600], 28: [900, 950] }
     : { 12: S, 14: E, 16: Wr, 24: Hp, 26: K, 28: A };
+  if (split) {
+    // Turn the body towards the camera: the far shoulder and hip appear beside the near ones.
+    far[12] = [S[0] - split, S[1]];
+    far[24] = [Hp[0] - split / 2, Hp[1]];
+  }
   const vis = Object.fromEntries(Object.keys(far).map((k) => [Number(k), farVisibility]));
   return landmarks({ 0: nose, ...near, ...far }, vis);
 }
@@ -455,8 +460,285 @@ describe("jumping jacks need the feet, not just the arms", () => {
   it("doesn't count reps when the legs are out of frame, and says why", () => {
     const r = run(new WorkoutEngine(jj), [down({ legs: false }), frontPose({ left: 170, right: 170, stance: 2, legs: false }), down({ legs: false })]);
     expect(last(r).reps).toBe(0);
-    expect(r.reps[0].type).toBe("partial");
-    expect(r.reps[0].note).toMatch(/feet are in frame/);
-    expect(last(r).issue).toMatchObject({ id: "unseen", label: "Can't see you" });
+    expect(r.reps).toHaveLength(0);
+    expect(last(r).issue).toMatchObject({ id: "framed", label: "Can't see you" });
+    expect(last(r).issue?.message).toMatch(/feet are in frame/);
+  });
+});
+
+describe("how much of the body must be in frame", () => {
+  const legsOut = (lm: Landmark[]) => lm.map((p, i) => (i >= 23 ? { ...p, y: 1.2 } : p));
+
+  it("counts curls with only the upper body in frame (e.g. seated)", () => {
+    const curl = getExercise("bicep_curl")!;
+    const r = run(new WorkoutEngine(curl), repeat([legsOut(sidePose({ elbow: 170 })), legsOut(sidePose({ elbow: 40 }))], 3).concat([legsOut(sidePose({ elbow: 170 }))]));
+    expect(last(r).reps).toBeGreaterThan(0);
+  });
+
+  it("still counts a press whose hands lock out above the top of the frame", () => {
+    const press = getExercise("shoulder_press")!;
+    const overhead = (elbow: number) => sidePose({ elbow, shoulder: elbow > 150 ? 175 : 90 }).map((p, i) => (i === 15 || i === 16 ? { ...p, y: elbow > 150 ? -0.1 : p.y } : p));
+    const r = run(new WorkoutEngine(press), repeat([overhead(80), overhead(170)], 3).concat([overhead(80)]));
+    expect(last(r).issue?.id).not.toBe("unseen");
+    expect(last(r).reps).toBeGreaterThan(0);
+  });
+
+  it("asks for hands and shoulders if the arms leave the frame during a curl", () => {
+    const curl = getExercise("bicep_curl")!;
+    const noWrist = sidePose({ elbow: 170 }).map((p, i) => (i === 15 || i === 16 ? { ...p, x: 1.3 } : p));
+    const r = run(new WorkoutEngine(curl), [noWrist, noWrist, noWrist, noWrist]);
+    expect(last(r).issue).toMatchObject({ id: "framed", message: "Keep your shoulders, elbows and hands in frame" });
+  });
+
+  it("needs the whole body for a squat", () => {
+    const squat = getExercise("squat")!;
+    const r = run(new WorkoutEngine(squat), repeat([legsOut(sidePose({ knee: 175 })), legsOut(sidePose({ knee: 85 }))], 3));
+    expect(last(r).reps).toBe(0);
+    expect(last(r).issue).toMatchObject({ id: "framed", message: "Step back so your whole body is in frame" });
+  });
+});
+
+describe("camera orientation", () => {
+  const curl = getExercise("bicep_curl")!;
+  const cycle = (o: object) => [sidePose({ elbow: 165, ...o }), sidePose({ elbow: 40, ...o }), sidePose({ elbow: 165, ...o })];
+  /** Facing the camera: both shoulders and hips clearly visible, shoulder width ≈ 0.9 of the torso. */
+  const facing = { split: 220, farVisibility: 0.99 };
+
+  it("doesn't count side-view curls while you face the camera, and says to turn", () => {
+    const r = run(new WorkoutEngine(curl), cycle(facing), { hold: 12 });
+    expect(last(r).reps).toBe(0);
+    expect(r.reps).toEqual([]);
+    expect(last(r).issue).toMatchObject({ id: "view", label: "Wrong angle" });
+    expect(last(r).issue!.message).toMatch(/sideways/i);
+  });
+
+  it("counts once you turn side-on", () => {
+    const engine = new WorkoutEngine(curl);
+    run(engine, cycle(facing), { hold: 12, start: 0 });
+    const r = run(engine, cycle({}), { hold: 12, start: 5000 });
+    expect(last(r).reps).toBe(1);
+    expect(last(r).issue).toBeNull();
+  });
+
+  it("never blocks when the far shoulder simply isn't visible", () => {
+    const r = run(new WorkoutEngine(curl), cycle({ split: 220, farVisibility: 0.2 }));
+    expect(last(r).reps).toBe(1);
+  });
+
+  it("doesn't count front-view exercises done side-on", () => {
+    const jj = getExercise("jumping_jack")!;
+    const sideOn = (p: Landmark[]) => p.map((l, i) => ((i === 12 ? 11 : i === 14 ? 13 : i === 16 ? 15 : i === 24 ? 23 : i === 26 ? 25 : i === 28 ? 27 : i) === i ? l : { ...l, x: p[i - 1].x }));
+    const poses = [frontPose({}), frontPose({ left: 170, right: 170, stance: 2 }), frontPose({})].map(sideOn);
+    const r = run(new WorkoutEngine(jj), poses, { hold: 12 });
+    expect(last(r).reps).toBe(0);
+    expect(last(r).issue).toMatchObject({ id: "view" });
+  });
+
+  it("doesn't change holds, which are judged from a fixed position", () => {
+    const r = run(new WorkoutEngine(getExercise("plank")!), [plankPose()], { hold: 40 });
+    expect(last(r).issue).toBeNull();
+  });
+});
+
+describe("rep quality beyond joint angles", () => {
+  const squat = getExercise("squat")!;
+  const up = sidePose({ knee: 175 });
+  const deep = sidePose({ knee: 85, lean: 35 });
+
+  it("records duration, no reversals and full smoothness on a clean rep", () => {
+    const r = run(new WorkoutEngine(squat), [up, deep, up]);
+    expect(r.reps[0].type).toBe("rep");
+    expect(r.reps[0].quality).toMatchObject({ reversals: 0, smoothness: 100 });
+    expect(r.reps[0].quality!.durationMs).toBeGreaterThan(400);
+  });
+
+  it("doesn't count a rep that stops and restarts midway", () => {
+    const half = sidePose({ knee: 130, lean: 15 });
+    const r = run(new WorkoutEngine(squat), [up, deep, half, deep, up]);
+    expect(last(r).reps).toBe(0);
+    expect(r.reps[0]).toMatchObject({ type: "partial", noteId: "stalled", note: expect.stringContaining("smooth") });
+    expect(r.snaps.find((x) => x.issue?.id === "stalled")?.issue).toMatchObject({ label: "Not smooth" });
+    expect(r.reps[0].quality!.reversals).toBeGreaterThan(0);
+  });
+
+  it("doesn't count a rep rushed through as a bounce, and says so", () => {
+    const r = run(new WorkoutEngine(squat), [up, deep, up], { hold: 4, blend: 3 });
+    expect(last(r).reps).toBe(0);
+    expect(r.reps[0]).toMatchObject({ type: "partial", noteId: "rushed", note: expect.stringContaining("Slow down") });
+    expect(r.snaps.find((x) => x.issue?.id === "rushed")?.issue).toMatchObject({ label: "Too fast", fromRep: true });
+  });
+
+  it("never rushes cardio: fast jumping jacks still count", () => {
+    const jj = getExercise("jumping_jack")!;
+    const open = frontPose({ left: 170, right: 170, stance: 1.6 });
+    const closed = frontPose({ left: 10, right: 10, stance: 0.6 });
+    const r = run(new WorkoutEngine(jj), repeat([closed, open], 3).concat([closed]), { hold: 3, blend: 3 });
+    expect(last(r).reps).toBeGreaterThan(0);
+  });
+});
+
+describe("body cut off by the frame", () => {
+  it("ignores hips MediaPipe guesses below the bottom edge, so no reps are counted", () => {
+    const squat = getExercise("squat")!;
+    const cut = (knee: number) =>
+      sidePose({ knee, farVisibility: 0.9 }).map((p, i) => (i === 23 || i === 24 ? { ...p, y: 1.15 } : p));
+    const r = run(new WorkoutEngine(squat), repeat([cut(175), cut(85)], 3).concat([cut(175)]));
+    expect(last(r).reps).toBe(0);
+  });
+
+  it("flags facing the camera even when the hips are out of frame", () => {
+    const curl = getExercise("bicep_curl")!;
+    const base = sidePose({ split: 380, farVisibility: 0.9 });
+    // Nose straight above the shoulder midpoint, as when you really face the camera.
+    const nose = { ...base[0], x: (base[11].x + base[12].x) / 2, y: base[11].y - 0.13 };
+    const facing = base.map((p, i) => (i === 0 ? nose : i === 23 || i === 24 ? { ...p, y: 1.15 } : p));
+    const r = run(new WorkoutEngine(curl), [facing, facing, facing, facing]);
+    expect(r.snaps.some((s) => s.issue?.id === "view")).toBe(true);
+  });
+});
+
+describe("tolerance for a noisy camera", () => {
+  const squat = getExercise("squat")!;
+  const up = sidePose({ knee: 175 });
+  const deep = sidePose({ knee: 85, lean: 35 });
+
+  it("still counts a controlled rep with landmark jitter on the way down and up", () => {
+    // A small wobble (about a tenth of the range) in the middle of each phase is jitter, not a stop.
+    const wobble = (lm: Landmark[], dx: number) => lm.map((p) => ({ ...p, y: p.y + dx }));
+    const down = sidePose({ knee: 130, lean: 15 });
+    const downJitter = sidePose({ knee: 140, lean: 15 });
+    const r = run(new WorkoutEngine(squat), [up, down, downJitter, down, deep, down, downJitter, down, up].map((lm, i) => wobble(lm, i % 2 ? 0.002 : -0.002)), { hold: 3, blend: 5 });
+    expect(r.reps.map((e) => e.type)).toEqual(["rep"]);
+    expect(r.reps[0].quality!.reversals).toBeLessThan(2);
+  });
+
+  it("still rejects stopping and restarting midway", () => {
+    const half = sidePose({ knee: 125, lean: 12 });
+    const r = run(new WorkoutEngine(squat), [up, deep, half, deep, up]);
+    expect(r.reps[0]).toMatchObject({ type: "partial", noteId: "stalled" });
+  });
+});
+
+describe("body framing", () => {
+  const squat = getExercise("squat")!;
+  const up = sidePose({ knee: 175 });
+  const deep = sidePose({ knee: 85, lean: 35 });
+  /** Moves the whole figure down so the ankles sit at `y` (angles are unchanged). */
+  const ankleY = (lm: Landmark[], y: number) => lm.map((p) => ({ ...p, y: p.y + (y - lm[27].y) }));
+
+  it("accepts ankles slightly below the bottom edge, but not ones far outside it", () => {
+    const near = run(new WorkoutEngine(squat), repeat([ankleY(up, 1.06), ankleY(deep, 1.06)], 3).concat([ankleY(up, 1.06)]));
+    expect(last(near).reps).toBeGreaterThan(0);
+    const far = run(new WorkoutEngine(squat), repeat([ankleY(up, 1.3), ankleY(deep, 1.3)], 3));
+    expect(last(far).reps).toBe(0);
+  });
+
+  it("rides out a brief dropout of the ankles mid-rep instead of pausing", () => {
+    const e = new WorkoutEngine(squat);
+    const warm = run(e, [up, up], { hold: 8 });
+    const dropout = run(e, [ankleY(deep, 1.4)], { hold: 4, start: 1000 });
+    expect(dropout.snaps.every((x) => x.issue?.id !== "framed")).toBe(true);
+    expect(warm.snaps.length).toBeGreaterThan(0);
+  });
+
+  it("does pause, and says why, once the ankles stay out of frame", () => {
+    const e = new WorkoutEngine(squat);
+    const r = run(e, [ankleY(up, 1.4)], { hold: 15 });
+    expect(last(r).issue).toMatchObject({ id: "framed" });
+  });
+});
+
+describe("hip sag in tilted bodies", () => {
+  /** Front view of a side plank: shoulders to ankles run across the image on a slope, hips `drop` px below the line. */
+  const sidePlank = (drop: number) => {
+    const S: P = [800, 500];
+    const A: P = [250, 900];
+    const Hp: P = [(S[0] + A[0]) / 2, (S[1] + A[1]) / 2 + drop];
+    const K: P = [(Hp[0] + A[0]) / 2, (Hp[1] + A[1]) / 2];
+    const pts = { 0: [850, 470] as P, 11: S, 12: S, 13: [S[0], S[1] + 120] as P, 14: [S[0], S[1] + 120] as P, 23: Hp, 24: Hp, 25: K, 26: K, 27: A, 28: A };
+    return landmarks(pts);
+  };
+
+  it("coaches hips dropping in a side plank", () => {
+    const plank = getExercise("side_plank")!;
+    const bad = run(new WorkoutEngine(plank), [sidePlank(110)], { hold: 25 });
+    expect(bad.coached.find((i) => i.id === "hips_dropping")).toMatchObject({ status: "bad" });
+    const fine = run(new WorkoutEngine(plank), [sidePlank(0)], { hold: 25 });
+    expect(fine.coached).toEqual([]);
+    expect(last(fine).holdMs).toBeGreaterThan(500);
+  });
+
+  it("measures sag on a steep line too, with the same sign", () => {
+    const steep = (drop: number) => {
+      const S: P = [700, 300];
+      const A: P = [300, 800];
+      const Hp: P = [500, 550 + drop];
+      return landmarks({ 11: S, 23: Hp, 27: A });
+    };
+    const sag = (lm: Landmark[]) => computeMetrics(lm, W, H, computeJointAngles(lm, W, H), ["left"]).global.hip_sag!;
+    expect(sag(steep(0))).toBeCloseTo(0, 0);
+    expect(sag(steep(60))).toBeGreaterThan(5);
+    expect(sag(steep(-60))).toBeLessThan(-5);
+  });
+});
+
+describe("knee metrics follow the judged side", () => {
+  it("ignores a far-side knee that is only weakly detected in side view", () => {
+    const lm = sidePose({ knee: 175, farVisibility: 0.7 }).map((p, i) => (i === 26 ? { ...p, x: 0.3, y: 0.62 } : p)); // wild far knee
+    const angles = computeJointAngles(lm, W, H);
+    const m = computeMetrics(lm, W, H, angles, ["left"]).global;
+    expect(m.knee_min).toBeGreaterThan(160);
+  });
+
+  it("uses a far-side knee once it is detected confidently", () => {
+    const lm = sidePose({ knee: 175, farVisibility: 0.95 }).map((p, i) => (i === 26 ? { ...p, x: 0.3, y: 0.62 } : p));
+    const m = computeMetrics(lm, W, H, computeJointAngles(lm, W, H), ["left"]).global;
+    expect(m.knee_min).toBeLessThan(160);
+  });
+});
+
+describe("shoulder press path and start position", () => {
+  const press = getExercise("shoulder_press")!;
+  const start = sidePose({ shoulder: 70, elbow: 80 }); // hands at the shoulders
+  const lockout = sidePose({ shoulder: 170, elbow: 172 }); // straight up
+  const atWaist = sidePose({ shoulder: 15, elbow: 95 }); // hands down by the belt
+  const forward = sidePose({ shoulder: 90, elbow: 172 }); // arms straight out in front
+  const noHips = (lm: Landmark[]) => lm.map((p, i) => (i === 23 || i === 24 ? { ...p, y: 1.2 } : p)); // seated, hips out of frame
+
+  it("counts a press that goes straight up without any drift warning", () => {
+    const r = run(new WorkoutEngine(press), [noHips(start), noHips(lockout), noHips(start)]);
+    expect(r.reps.map((e) => e.type)).toEqual(["rep"]);
+    expect(r.coached.find((i) => i.id === "press_drift")).toBeUndefined();
+  });
+
+  it("doesn't count straight arms held out in front, however straight the elbows get", () => {
+    const r = run(new WorkoutEngine(press), [noHips(start), noHips(forward), noHips(start)], { hold: 14 });
+    expect(last(r).reps).toBe(0);
+    expect(r.reps[0]).toMatchObject({ type: "partial" });
+    expect(r.reps[0].faults[0]).toMatchObject({ status: "bad", rule: { id: "hands_not_up" } });
+    expect(r.coached.find((i) => i.id === "press_drift")).toMatchObject({ status: "warn" });
+  });
+
+  it("doesn't count a press that stops with the hands only at head height", () => {
+    const headHigh = sidePose({ shoulder: 130, elbow: 172 });
+    const r = run(new WorkoutEngine(press), [noHips(start), noHips(headHigh), noHips(start)]);
+    expect(last(r).reps).toBe(0);
+  });
+
+  it("doesn't count a press that starts from the waist, and says where to start", () => {
+    const r = run(new WorkoutEngine(press), [noHips(atWaist), noHips(lockout), noHips(atWaist)]);
+    expect(last(r).reps).toBe(0);
+    expect(r.reps[0]).toMatchObject({ type: "partial", noteId: "start", note: expect.stringContaining("shoulder height") });
+    expect(r.snaps.find((x) => x.issue?.id === "start")?.issue).toMatchObject({ label: "Start position" });
+  });
+
+  it("counts the next rep once you start from the shoulders again", () => {
+    const r = run(new WorkoutEngine(press), [noHips(atWaist), noHips(lockout), noHips(start), noHips(lockout), noHips(start)]);
+    expect(r.reps.map((e) => e.type)).toEqual(["partial", "rep"]);
+  });
+
+  it("doesn't block when the wrist can't be measured at the start", () => {
+    const e = new WorkoutEngine(getExercise("bicep_curl")!); // no start_check configured
+    expect(run(e, [sidePose({ elbow: 170 }), sidePose({ elbow: 40 }), sidePose({ elbow: 170 })]).reps[0].type).toBe("rep");
   });
 });

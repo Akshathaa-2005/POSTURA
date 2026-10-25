@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
+import { browserSpeechAvailable, useVoice } from "@/hooks/useCoachVoice";
 import { useWorkoutState } from "@/hooks/useWorkoutState";
 import type { Exercise } from "@/types";
 import { formatDuration, formatPercent, STATUS_COLORS } from "@/utils/formatters";
@@ -16,6 +17,10 @@ export default function WorkoutHUD({ exercise, cameraOn }: Props) {
   const issue = useWorkoutState((s) => s.issue);
   const coach = useWorkoutState((s) => s.coach);
   const activeMs = useWorkoutState((s) => s.activeMs);
+  const voiceOn = useVoice((s) => s.enabled);
+  const setVoiceOn = useVoice((s) => s.setEnabled);
+  const speaking = useVoice((s) => s.speaking);
+  const canSpeak = coach.tts || browserSpeechAvailable();
 
   const isHold = exercise.mode === "hold";
   const displayScore = score ?? averageScore;
@@ -64,7 +69,27 @@ export default function WorkoutHUD({ exercise, cameraOn }: Props) {
               {coach.connection === "online" ? "AI Coach Active" : "Local Coach"}
             </span>
           </div>
-          <p className="eyebrow mt-0.5 !text-[10px]">Guidance Engine</p>
+          <div className="mt-1 flex items-center gap-2">
+            <p className="eyebrow !text-[10px]">Guidance Engine</p>
+            <div className="flex items-end gap-[2px]" aria-hidden>
+              {[0, 1, 2, 3].map((i) => (
+                <span
+                  key={i}
+                  className={`h-3 w-[2px] origin-bottom rounded-full bg-taupe ${speaking ? "animate-wave" : "scale-y-[0.25]"}`}
+                  style={{ animationDelay: `${i * 0.12}s` }}
+                />
+              ))}
+            </div>
+            <button
+              onClick={() => setVoiceOn((v) => !v)}
+              disabled={!canSpeak}
+              aria-pressed={voiceOn}
+              title={canSpeak ? "Spoken coaching" : "This browser can't speak, and the server has no speech engine"}
+              className={`pill !px-2 !py-0 text-[10px] ${voiceOn ? "border-slate bg-slate text-linen" : "border-slate/15 text-stone"}`}
+            >
+              {voiceOn ? "Voice on" : "Voice off"}
+            </button>
+          </div>
         </div>
       </div>
 

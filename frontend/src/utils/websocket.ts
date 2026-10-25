@@ -12,13 +12,14 @@ export type ServerMessage =
       source: "llm" | "template" | "cache";
       avatar_command?: AvatarCommand | null;
     }
-  | { type: "voice"; id: number; url: string; text: string; kind: "correction" | "praise" | "intro" }
+  // `url` is null when the server can't synthesise speech: the browser speaks `text` instead.
+  | { type: "voice"; id: number; url: string | null; text: string; kind: "correction" | "praise" | "intro" }
   | { type: "session_saved"; session_id: string }
   | { type: "error"; message: string };
 
 export type ClientMessage =
   | { type: "start"; exercise_id: string }
-  | { type: "issue"; fault_id: string; status: "warn" | "bad"; side: Side | null; from_rep: boolean }
+  | { type: "issue"; fault_id: string; status: "warn" | "bad"; side: Side | null; from_rep: boolean; message?: string }
   | { type: "praise" }
   | { type: "rep"; event: "rep" | "partial"; reps: number; rom: number }
   | { type: "end"; reps: number; avg_score: number | null; duration_sec: number };

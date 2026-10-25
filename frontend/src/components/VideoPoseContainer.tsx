@@ -196,7 +196,11 @@ export default function VideoPoseContainer({
         {status === "running" && (!personVisible || !inFrame) && (
           <div className="absolute inset-x-0 top-4 flex justify-center px-4">
             <div className="rounded-full bg-linen/90 px-5 py-2 text-sm text-ink shadow-soft backdrop-blur">
-              {personVisible ? `Adjust position: ${exercise.camera_setup.toLowerCase()}` : "Step into the frame"}
+              {personVisible
+                ? `Adjust position: ${exercise.camera_setup.toLowerCase()}`
+                : exercise.body_scope === "upper"
+                  ? "Can't find you: move back so your head, shoulders and arms are in frame"
+                  : "Can't find you: move back so your whole body is in frame"}
             </div>
           </div>
         )}

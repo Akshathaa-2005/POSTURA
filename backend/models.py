@@ -23,6 +23,8 @@ class IssueMessage(BaseModel):
     status: Literal["warn", "bad"]
     side: Literal["left", "right"] | None = None
     from_rep: bool = False
+    # The wording the screen shows. Only used for synthetic faults (framing, tempo) that have no authored cue.
+    message: str | None = Field(default=None, max_length=200)
 
 
 class PraiseMessage(BaseModel):

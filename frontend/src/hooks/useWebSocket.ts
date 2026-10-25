@@ -26,7 +26,7 @@ function handleMessage(msg: ServerMessage) {
       });
       break;
     case "voice": {
-      const voice = { id: msg.id, url: backendUrl(msg.url), text: msg.text };
+      const voice = { id: msg.id, url: msg.url ? backendUrl(msg.url) : "", text: msg.text };
       if (msg.kind === "correction") {
         setCoach({ voice });
       } else {
@@ -89,6 +89,8 @@ export function useWebSocket({ exerciseId, active, sessionKey }: { exerciseId: s
       status: issue.status,
       side: issue.side,
       from_rep: issue.fromRep,
+      // Synthetic issues (framing, tempo) have no fixed cue in exercises.json, so the screen's wording is spoken.
+      message: issue.message,
     });
   }, []);
 
