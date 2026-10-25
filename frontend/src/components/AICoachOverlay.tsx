@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { browserSpeechAvailable, useVoice } from "@/hooks/useCoachVoice";
 import { useWorkoutState } from "@/hooks/useWorkoutState";
 import { STATUS_COLORS } from "@/utils/formatters";
 
@@ -9,23 +8,12 @@ const SOURCE_LABEL = { llm: "AI coach", cache: "AI coach", template: "Coach" } a
 export default function AICoachOverlay() {
   const coach = useWorkoutState((s) => s.coach);
   const cameraOn = useWorkoutState((s) => s.status !== "idle");
-  const [voiceOn, setVoiceOn] = useLocalStorage("aicoach.voice", true);
-  const [speaking, setSpeaking] = useState(false);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const voiceOn = useVoice((s) => s.enabled);
+  const setVoiceOn = useVoice((s) => s.setEnabled);
+  const speaking = useVoice((s) => s.speaking);
+  const canSpeak = coach.tts || browserSpeechAvailable();
 
-  // Play each new voice clip as it arrives.
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !coach.voice || !voiceOn) return;
-    audio.src = coach.voice.url;
-    audio.play().catch(() => setSpeaking(false)); // autoplay can be blocked until the user interacts
-  }, [coach.voice, voiceOn]);
-
-  useEffect(() => {
-    if (!voiceOn) audioRef.current?.pause();
-  }, [voiceOn]);
-
-  const { connection, llm, tts, correction } = coach;
+  const { connection, llm, correction } = coach;
   const status =
     connection === "online"
       ? { dot: "bg-good", label: llm ? "Live · AI corrections" : "Live · guided corrections" }
@@ -56,9 +44,9 @@ export default function AICoachOverlay() {
         </div>
         <button
           onClick={() => setVoiceOn((v) => !v)}
-          disabled={connection === "online" && !tts}
+          disabled={!canSpeak}
           aria-pressed={voiceOn}
-          title={tts ? undefined : "Voice synthesis is unavailable on the server"}
+          title={canSpeak ? undefined : "This browser can't speak, and the server has no speech engine"}
           className={`pill !px-3 !py-1 text-xs ${voiceOn ? "border-slate bg-slate text-linen" : "border-slate/15 text-stone"}`}
         >
           {voiceOn ? "Voice on" : "Voice off"}
@@ -87,15 +75,6 @@ export default function AICoachOverlay() {
           </motion.p>
         )}
       </AnimatePresence>
-
-      <audio
-        ref={audioRef}
-        preload="auto"
-        onPlay={() => setSpeaking(true)}
-        onEnded={() => setSpeaking(false)}
-        onPause={() => setSpeaking(false)}
-        onError={() => setSpeaking(false)}
-      />
     </section>
   );
 }

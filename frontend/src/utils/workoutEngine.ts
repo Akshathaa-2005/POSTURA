@@ -6,7 +6,9 @@ import type {
   JointAngles,
   JointStatus,
   RepEvent,
+  RepNoteId,
   RepPhase,
+  RepQuality,
   ScoreBreakdown,
   Side,
 } from "@/types";
@@ -22,6 +24,8 @@ import {
   PENALTY,
   setupSatisfied,
   sideVisibility,
+  sideLandmarks,
+  usableAt,
   type BodyRegion,
   type FrameMetrics,
   type MetricValue,
@@ -45,16 +49,49 @@ const REP_ISSUE_MS = 5000;
 const REP_HIGHLIGHT_MS = 1500;
 /** Switch the tracked side (side view) only when the other side is clearly more visible. */
 const SIDE_SWITCH_MARGIN = 0.08;
+/**
+ * Camera orientation. Side-view exercises need the camera to see you from the side (shoulders overlap, ratio near 0);
+ * front-view ones need you to face it. Every check assumes the right view, so reps aren't judged in the wrong one.
+ * Two thresholds per view give hysteresis, so a borderline stance doesn't flicker.
+ */
+const VIEW_SIDE_WRONG_ABOVE = 0.55;
+const VIEW_SIDE_OK_BELOW = 0.45;
+const VIEW_FRONT_WRONG_BELOW = 0.2;
+const VIEW_FRONT_OK_ABOVE = 0.28;
 /** A major live fault held this many frames during a rep means the rep doesn't count. */
 const REP_BAD_FRAMES = 3;
 /** A rep doesn't count if the body was out of frame (or out of position) for more than this share of it. */
 const MAX_LOST_FRACTION = 0.3;
+/** The start position is judged this long before the rep leaves the start phase… */
+const START_LOOKBACK_MS = 300;
+/** …from results kept for this long. */
+const START_LOG_MS = 1000;
+/** Strength, core and mobility reps faster than this are bounces, not controlled reps. Cardio is exempt. */
+const DEFAULT_MIN_REP_MS = 400;
+/** A swing back by this share of the range of motion counts as a direction change. */
+const REVERSAL_HYSTERESIS = 0.3;
+/** Weight of the newest sample when smoothing the rep's progress before counting direction changes. */
+const PROGRESS_SMOOTHING = 0.5;
+/** Landmark jitter can fake one back-and-forth; a rep is only a stall or bounce with at least this many extra turns. */
+const STALL_REVERSALS = 2;
+/** The needed body parts must be missing this many frames in a row (~0.25 s) before counting pauses. */
+const UNFRAMED_FRAMES = 8;
+/** Smoothness lost per extra direction change. */
+const REVERSAL_PENALTY = 35;
 /** Praise every Nth consecutive clean rep… */
 const PRAISE_EVERY = 3;
 /** …or every this-many seconds of a clean hold. */
 const HOLD_PRAISE_MS = 10_000;
 /** Longest gap between frames counted towards a hold (e.g. a dropped frame, not a pause). */
 const MAX_FRAME_GAP_MS = 250;
+
+const NOTE_LABEL: Record<RepNoteId, string> = {
+  unseen: "Can't see you",
+  lost: "Left the frame",
+  rushed: "Too fast",
+  stalled: "Not smooth",
+  start: "Start position",
+};
 
 export interface EngineSnapshot {
   landmarks: Landmark[] | null;
@@ -110,6 +147,8 @@ export class WorkoutEngine {
   private repLostFrames = 0;
   private repHits: FaultHit[] = [];
   private repHitsAt = -Infinity;
+  /** The rep metric's progress (0 = start, 1 = peak) over the current rep, to judge how it was performed. */
+  private repTrack: { t: number; p: number }[] = [];
   private cleanStreak = 0;
 
   private liveSince = new Map<string, number>();
@@ -118,7 +157,16 @@ export class WorkoutEngine {
   private lastIssueKey: string | null = null;
   private readonly recorder = new RepRecorder();
   /** Why the last rep couldn't be judged (body or feet out of frame), shown until the next rep. */
-  private seenProblem: { message: string; at: number } | null = null;
+  private seenProblem: { id: RepNoteId; message: string; at: number } | null = null;
+  private wrongView = false;
+  /** The body parts this exercise needs are all inside the frame (see `Exercise.body_scope`). */
+  private framed = true;
+  private unframedFrames = 0;
+  /** Whether the body was in the right place (`rep.start_check`) at its most rested before the rep. */
+  private startHeld = true;
+  /** Start-check results from the last second spent in the start phase, newest last. */
+  private startLog: { t: number; ok: boolean }[] = [];
+  private lastDebugAt = -Infinity;
 
   private holdMs = 0;
   private lastFrameAt: number | null = null;
@@ -138,6 +186,10 @@ export class WorkoutEngine {
     const dt = this.lastFrameAt === null ? 0 : Math.min(MAX_FRAME_GAP_MS, now - this.lastFrameAt);
     this.lastFrameAt = now;
     if (!raw) {
+      if (process.env.NODE_ENV !== "production" && now - this.lastDebugAt >= 2000) {
+        this.lastDebugAt = now;
+        console.info("[track] MediaPipe returned no pose for this frame (nobody detected, or too close / too cropped)");
+      }
       if (this.counter && this.counter.phase !== "start") this.repLostFrames += 1;
       this.smoothed = null;
       this.setupFailSince = null;
@@ -165,25 +217,58 @@ export class WorkoutEngine {
     // 2. Decide which side(s) to judge. In side view the far limbs are guessed by the model, so ignore them.
     const sides = this.pickSides(lm);
     const metrics = this.smoothMetrics(computeMetrics(lm, width, height, angles, sides));
-    const setupOk = setupSatisfied(this.exercise.setup, metrics);
+    const viewOk = this.checkView(metrics);
+    const setupOk = setupSatisfied(this.exercise.setup, metrics) && viewOk;
 
     // 3. Reps (only once the starting position is held). Holds are "in frame" when their position is measurable.
     const trackedMetric = this.counter ? this.exercise.rep!.metric : this.exercise.setup!.metric;
     const repValues = metricValues(metrics, trackedMetric);
-    const inFrame = repValues.length > 0;
+    if (process.env.NODE_ENV !== "production" && now - this.lastDebugAt >= 500) {
+      this.lastDebugAt = now;
+      const avg = repValues.length ? repValues.reduce((s, v) => s + v.value, 0) / repValues.length : null;
+      console.info("[track]", this.exercise.id, {
+        [trackedMetric]: avg === null ? "not measurable" : Math.round(avg),
+        progress: avg === null || !this.counter ? null : Number(this.counter.progress(avg).toFixed(2)),
+        phase: this.counter?.phase,
+        framed: this.framed,
+        wrongView: this.wrongView,
+        setupOk,
+        side: sides.join("+"),
+        viewRatio: metrics.global.view_ratio === undefined ? "n/a" : Number(metrics.global.view_ratio.toFixed(2)),
+      });
+    }
+    this.unframedFrames = this.bodyFramed(lm, sides) ? 0 : this.unframedFrames + 1;
+    this.framed = this.unframedFrames < UNFRAMED_FRAMES;
+    const inFrame = repValues.length > 0 && this.framed;
     let repEvent: RepEvent | null = null;
     if (this.counter && inFrame && setupOk) {
+      const startCheck = this.exercise.rep?.start_check;
+      const wasStart = this.counter.phase === "start";
+      if (startCheck && wasStart) {
+        const values = metricValues(metrics, startCheck.metric);
+        this.startLog.push({ t: now, ok: values.length === 0 || setupSatisfied(startCheck, metrics) }); // can't tell: don't block
+        while (this.startLog[0] && now - this.startLog[0].t > START_LOG_MS) this.startLog.shift();
+      }
       const count = this.counter.update(repValues.reduce((s, v) => s + v.value, 0) / repValues.length, now);
       this.recorder.push(raw, width, height, this.counter.phase !== "start" || count !== null);
+      if (startCheck && wasStart && this.counter.phase !== "start") {
+        // The arm already moves a little before the rep begins, so judge the position from just before the movement.
+        const before = this.startLog.filter((e) => e.t <= now - START_LOOKBACK_MS).pop() ?? this.startLog[0];
+        this.startHeld = before?.ok ?? true;
+        this.startLog = [];
+      }
       if (this.counter.phase !== "start") {
         this.aggregateRep(metrics);
         this.repFrames += 1;
+        this.repTrack.push({ t: now, p: this.counter.progress(repValues.reduce((s, v) => s + v.value, 0) / repValues.length) });
       }
       if (count) {
         repEvent = this.judgeRep(count);
         repEvent.window = this.recorder.finish() ?? undefined;
         this.onRep(repEvent, now);
-        if (repEvent.note && !repEvent.faults.length) this.seenProblem = { message: repEvent.note, at: now };
+        if (repEvent.note && !repEvent.faults.some((f) => f.status === "bad")) {
+          this.seenProblem = { id: repEvent.noteId ?? "unseen", message: repEvent.note, at: now };
+        }
       } else if (this.counter.phase === "start") {
         this.resetRep();
         this.recorder.discard();
@@ -264,6 +349,28 @@ export class WorkoutEngine {
     });
   }
 
+  /** Whether every landmark the exercise depends on is detected and inside the frame, for the judged side(s). */
+  private bodyFramed(lm: Landmark[], sides: Side[]): boolean {
+    const parts = this.exercise.body_scope === "upper" ? (["shoulder", "elbow", "wrist"] as const) : (["shoulder", "hip", "knee", "ankle"] as const);
+    return sides.every((side) => parts.every((part) => usableAt(lm, sideLandmarks(side)[part])));
+  }
+
+  /** True unless the camera clearly sees the body from the wrong direction for this exercise. */
+  private checkView(metrics: FrameMetrics): boolean {
+    const ratio = metrics.global.view_ratio;
+    if (ratio === undefined || this.hold) {
+      // Not measurable (the far shoulder is hidden, as it usually is side-on) must never block a workout.
+      this.wrongView = false;
+      return true;
+    }
+    if (this.exercise.view === "side") {
+      this.wrongView = this.wrongView ? ratio > VIEW_SIDE_OK_BELOW : ratio > VIEW_SIDE_WRONG_ABOVE;
+    } else {
+      this.wrongView = this.wrongView ? ratio < VIEW_FRONT_OK_ABOVE : ratio < VIEW_FRONT_WRONG_BELOW;
+    }
+    return !this.wrongView;
+  }
+
   private pickSides(lm: Landmark[]): Side[] {
     if (this.exercise.view === "front") return ["left", "right"];
     const l = sideVisibility(lm, "left");
@@ -316,28 +423,63 @@ export class WorkoutEngine {
     }
     faults.sort((a, b) => severityRank(b.status) - severityRank(a.status));
     const lost = this.repLostFrames > (this.repFrames + this.repLostFrames) * MAX_LOST_FRACTION;
+    const quality = this.repQuality();
+    const minMs = this.exercise.rep?.min_duration_ms ?? (this.exercise.category === "cardio" ? 0 : DEFAULT_MIN_REP_MS);
+    const rushed = quality.durationMs < minMs;
+    const badStart = !this.startHeld;
+    const stalled = quality.reversals >= STALL_REVERSALS;
     if (process.env.NODE_ENV !== "production") {
       console.info("[rep]", count.type, {
         rom: count.rom,
         faults: faults.map((f) => `${f.rule.id}:${f.status}@${Math.round(f.value)}`),
         framesInRep: this.repFrames,
         framesLost: this.repLostFrames,
-        counted: count.type === "rep" && !faults.some((f) => f.status === "bad") && !lost,
+        durationMs: Math.round(quality.durationMs),
+        reversals: quality.reversals,
+        smoothness: quality.smoothness,
+        counted: count.type === "rep" && !faults.some((f) => f.status === "bad") && !lost && !badStart && !rushed && !stalled,
       });
     }
     this.resetRep();
 
-    if (count.type !== "rep") return { ...count, faults };
-    if (faults.some((f) => f.status === "bad")) return { ...count, type: "partial", faults };
+    if (count.type !== "rep") return { ...count, faults, quality };
+    if (faults.some((f) => f.status === "bad")) return { ...count, type: "partial", faults, quality };
     if (unseen) {
-      return { ...count, type: "partial", faults, note: unseen.unseen_cue ?? "Step back so your whole body is in frame" };
+      return { ...count, type: "partial", faults, quality, noteId: "unseen", note: unseen.unseen_cue ?? "Step back so your whole body is in frame" };
     }
-    if (lost) return { ...count, type: "partial", faults, note: "Stay fully in frame for the whole rep" };
+    if (lost) return { ...count, type: "partial", faults, quality, noteId: "lost", note: "Stay fully in frame for the whole rep" };
+    if (badStart) return { ...count, type: "partial", faults, quality, noteId: "start", note: this.exercise.rep!.start_check!.cue };
+    if (rushed) return { ...count, type: "partial", faults, quality, noteId: "rushed", note: "Slow down and control the movement" };
+    if (stalled) return { ...count, type: "partial", faults, quality, noteId: "stalled", note: "Keep one smooth motion, don't stop or bounce midway" };
     this.counter!.commit();
-    return { ...count, faults };
+    return { ...count, faults, quality };
+  }
+
+  /** Duration and direction changes of the finished rep, from the rep metric's trajectory. */
+  private repQuality(): RepQuality {
+    // Smooth progress so landmark jitter doesn't register as a change of direction.
+    const track: { t: number; p: number }[] = [];
+    for (const { t, p } of this.repTrack) track.push({ t, p: ema(track[track.length - 1]?.p, p, PROGRESS_SMOOTHING) });
+    const durationMs = track.length > 1 ? track[track.length - 1].t - track[0].t : 0;
+    // Count direction changes of at least REVERSAL_HYSTERESIS, not counting the natural turn at the peak (so a clean rep has 0).
+    let rising = true; // every rep leaves the start position heading towards the peak
+    let extreme = track[0]?.p ?? 0;
+    let turns = 0;
+    for (const { p } of track) {
+      if (rising ? p > extreme : p < extreme) extreme = p;
+      else if (Math.abs(p - extreme) >= REVERSAL_HYSTERESIS) {
+        rising = !rising;
+        extreme = p;
+        turns += 1;
+      }
+    }
+    const reversals = Math.max(0, turns - 1);
+    const smoothness = Math.max(0, 100 - reversals * REVERSAL_PENALTY);
+    return { durationMs, reversals, smoothness };
   }
 
   private resetRep() {
+    this.repTrack = [];
     this.repAgg.clear();
     this.repLiveBad.clear();
     this.repFrames = 0;
@@ -385,6 +527,29 @@ export class WorkoutEngine {
   }
 
   private chooseIssue(live: FaultHit[], setupOk: boolean, inFrame: boolean, now: number): FormIssue | null {
+    if (this.wrongView && inFrame) {
+      return {
+        id: "view",
+        label: "Wrong angle",
+        message: `${this.exercise.camera_setup}.`,
+        status: "warn",
+        side: null,
+        fromRep: false,
+      };
+    }
+    if (!this.framed) {
+      return {
+        id: "framed",
+        label: "Can't see you",
+        message:
+          this.exercise.body_scope === "upper"
+            ? "Keep your shoulders, elbows and hands in frame"
+            : (this.exercise.faults.find((f) => f.unseen_cue)?.unseen_cue ?? "Step back so your whole body is in frame"),
+        status: "warn",
+        side: null,
+        fromRep: false,
+      };
+    }
     const setup = this.exercise.setup;
     if (setup && !setupOk && inFrame) {
       this.setupFailSince ??= now;
@@ -407,12 +572,12 @@ export class WorkoutEngine {
         order(a.hit) - order(b.hit),
     );
     const top = candidates[0];
-    if (!top) {
-      if (this.seenProblem && now - this.seenProblem.at < REP_ISSUE_MS) {
-        return { id: "unseen", label: "Can't see you", message: this.seenProblem.message, status: "warn", side: null, fromRep: true };
-      }
-      return null;
+    // Why the last rep wasn't counted (out of frame, too fast, not smooth) outranks its minor depth/range cues.
+    if (this.seenProblem && now - this.seenProblem.at < REP_ISSUE_MS && (!top || (top.fromRep && top.hit.status === "warn"))) {
+      const { id, message } = this.seenProblem;
+      return { id, label: NOTE_LABEL[id], message, status: "warn", side: null, fromRep: true };
     }
+    if (!top) return null;
     return {
       id: top.hit.rule.id,
       label: top.hit.rule.label,

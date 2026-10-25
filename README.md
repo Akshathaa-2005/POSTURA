@@ -54,6 +54,7 @@ webcam → usePoseDetection (MediaPipe, in-browser)
            ├─ pick sides: front view → both · side view → the side facing the camera
            │    (the far side is mostly guessed by the model, so it is never judged)
            ├─ metrics: joint angles, torso lean, hip sag, hands overhead, stance width…
+           ├─ camera-angle gate (side-view exercises need you side-on, front-view ones facing the camera)
            ├─ setup gate (e.g. push-up: must be in a plank before anything counts)
            ├─ RepCounter on the exercise's rep metric; min/max of every rep-fault metric per rep
            ├─ a rep counts only if it reaches the count line, has no major fault held during it,

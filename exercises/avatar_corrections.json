@@ -1,0 +1,1331 @@
+{
+ "_doc": "Canonical corrective avatar rules per fault (degrees, relative offsets, Euler YXZ). UpLeg/Arm x<0 flexes forward, Leg x>0 bends the knee, ForeArm x<0 bends the elbow, Left limbs abduct with z<0 and Right with z>0, Spine/Hips x>0 tips forward. Loaded by backend/schemas/avatar.py and frontend/src/utils/avatarCorrections.ts.",
+ "faults": {
+  "shallow_squat": {
+   "highlight_joints": [
+    "LeftUpLeg",
+    "RightUpLeg",
+    "LeftLeg",
+    "RightLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftUpLeg",
+     "target_rotation": {
+      "x": -20,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightUpLeg",
+     "target_rotation": {
+      "x": -20,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "LeftLeg",
+     "target_rotation": {
+      "x": 25,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightLeg",
+     "target_rotation": {
+      "x": 25,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "chest_forward": {
+   "highlight_joints": [
+    "Spine",
+    "Spine1"
+   ],
+   "actions": [
+    {
+     "bone_name": "Spine",
+     "target_rotation": {
+      "x": -18,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "Spine1",
+     "target_rotation": {
+      "x": -10,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "hips_sagging": {
+   "highlight_joints": [
+    "Hips",
+    "Spine"
+   ],
+   "actions": [
+    {
+     "bone_name": "Hips",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "Spine",
+     "target_rotation": {
+      "x": -10,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "hips_piking": {
+   "highlight_joints": [
+    "Hips",
+    "Spine"
+   ],
+   "actions": [
+    {
+     "bone_name": "Hips",
+     "target_rotation": {
+      "x": -12,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "Spine",
+     "target_rotation": {
+      "x": 8,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "shallow_push_up": {
+   "highlight_joints": [
+    "LeftForeArm",
+    "RightForeArm",
+    "LeftArm",
+    "RightArm"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftForeArm",
+     "target_rotation": {
+      "x": -30,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightForeArm",
+     "target_rotation": {
+      "x": -30,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "LeftArm",
+     "target_rotation": {
+      "x": 12,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightArm",
+     "target_rotation": {
+      "x": 12,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "arms_not_overhead": {
+   "highlight_joints": [
+    "LeftArm",
+    "RightArm"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftArm",
+     "target_rotation": {
+      "x": 0,
+      "y": 0,
+      "z": -35
+     }
+    },
+    {
+     "bone_name": "RightArm",
+     "target_rotation": {
+      "x": 0,
+      "y": 0,
+      "z": 35
+     }
+    }
+   ]
+  },
+  "feet_narrow": {
+   "highlight_joints": [
+    "LeftUpLeg",
+    "RightUpLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftUpLeg",
+     "target_rotation": {
+      "x": 0,
+      "y": 0,
+      "z": -15
+     }
+    },
+    {
+     "bone_name": "RightUpLeg",
+     "target_rotation": {
+      "x": 0,
+      "y": 0,
+      "z": 15
+     }
+    }
+   ]
+  },
+  "bent_arms": {
+   "highlight_joints": [
+    "LeftForeArm",
+    "RightForeArm"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftForeArm",
+     "target_rotation": {
+      "x": 20,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightForeArm",
+     "target_rotation": {
+      "x": 20,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "shallow_lunge": {
+   "highlight_joints": [
+    "LeftUpLeg",
+    "RightUpLeg",
+    "LeftLeg",
+    "RightLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftUpLeg",
+     "target_rotation": {
+      "x": -15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightUpLeg",
+     "target_rotation": {
+      "x": -15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "LeftLeg",
+     "target_rotation": {
+      "x": 20,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightLeg",
+     "target_rotation": {
+      "x": 20,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "torso_lean": {
+   "highlight_joints": [
+    "Spine",
+    "Spine1"
+   ],
+   "actions": [
+    {
+     "bone_name": "Spine",
+     "target_rotation": {
+      "x": -15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "Spine1",
+     "target_rotation": {
+      "x": -8,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "elbow_drift": {
+   "highlight_joints": [
+    "LeftArm",
+    "RightArm"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftArm",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightArm",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "partial_curl": {
+   "highlight_joints": [
+    "LeftForeArm",
+    "RightForeArm"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftForeArm",
+     "target_rotation": {
+      "x": -35,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightForeArm",
+     "target_rotation": {
+      "x": -35,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "swinging": {
+   "highlight_joints": [
+    "Spine",
+    "Hips"
+   ],
+   "actions": [
+    {
+     "bone_name": "Spine",
+     "target_rotation": {
+      "x": -8,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "Hips",
+     "target_rotation": {
+      "x": -4,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "no_lockout": {
+   "highlight_joints": [
+    "LeftForeArm",
+    "RightForeArm",
+    "LeftArm",
+    "RightArm"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftForeArm",
+     "target_rotation": {
+      "x": 25,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightForeArm",
+     "target_rotation": {
+      "x": 25,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "hands_not_up": {
+   "highlight_joints": [
+    "LeftArm",
+    "RightArm"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftArm",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightArm",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "press_drift": {
+   "highlight_joints": [
+    "LeftArm",
+    "RightArm"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftArm",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightArm",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "pressing_forward": {
+   "highlight_joints": [
+    "LeftArm",
+    "RightArm"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftArm",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightArm",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "leaning_back": {
+   "highlight_joints": [
+    "Spine",
+    "Spine1"
+   ],
+   "actions": [
+    {
+     "bone_name": "Spine",
+     "target_rotation": {
+      "x": 10,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "Spine1",
+     "target_rotation": {
+      "x": 5,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "low_knees": {
+   "highlight_joints": [
+    "LeftUpLeg",
+    "RightUpLeg",
+    "LeftLeg",
+    "RightLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftUpLeg",
+     "target_rotation": {
+      "x": -25,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightUpLeg",
+     "target_rotation": {
+      "x": -25,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "LeftLeg",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightLeg",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "leaning": {
+   "highlight_joints": [
+    "Spine",
+    "Spine1"
+   ],
+   "actions": [
+    {
+     "bone_name": "Spine",
+     "target_rotation": {
+      "x": -10,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "Spine1",
+     "target_rotation": {
+      "x": -5,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "no_extension": {
+   "highlight_joints": [
+    "Hips",
+    "LeftUpLeg",
+    "RightUpLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "Hips",
+     "target_rotation": {
+      "x": -15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "LeftUpLeg",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightUpLeg",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "feet_far": {
+   "highlight_joints": [
+    "LeftLeg",
+    "RightLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftLeg",
+     "target_rotation": {
+      "x": 20,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightLeg",
+     "target_rotation": {
+      "x": 20,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "feet_close": {
+   "highlight_joints": [
+    "LeftLeg",
+    "RightLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftLeg",
+     "target_rotation": {
+      "x": -20,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightLeg",
+     "target_rotation": {
+      "x": -20,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "too_high": {
+   "highlight_joints": [
+    "LeftUpLeg",
+    "RightUpLeg",
+    "LeftLeg",
+    "RightLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftUpLeg",
+     "target_rotation": {
+      "x": -15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightUpLeg",
+     "target_rotation": {
+      "x": -15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "LeftLeg",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightLeg",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "too_low": {
+   "highlight_joints": [
+    "LeftUpLeg",
+    "RightUpLeg",
+    "LeftLeg",
+    "RightLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftUpLeg",
+     "target_rotation": {
+      "x": 12,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightUpLeg",
+     "target_rotation": {
+      "x": 12,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "LeftLeg",
+     "target_rotation": {
+      "x": -12,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightLeg",
+     "target_rotation": {
+      "x": -12,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "off_wall": {
+   "highlight_joints": [
+    "Spine",
+    "Spine1"
+   ],
+   "actions": [
+    {
+     "bone_name": "Spine",
+     "target_rotation": {
+      "x": -12,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "Spine1",
+     "target_rotation": {
+      "x": -6,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "hips_dropping": {
+   "highlight_joints": [
+    "Hips",
+    "Spine"
+   ],
+   "actions": [
+    {
+     "bone_name": "Hips",
+     "target_rotation": {
+      "x": 0,
+      "y": 0,
+      "z": -10
+     }
+    },
+    {
+     "bone_name": "Spine",
+     "target_rotation": {
+      "x": 0,
+      "y": 0,
+      "z": -6
+     }
+    }
+   ]
+  },
+  "shallow_sumo": {
+   "highlight_joints": [
+    "LeftUpLeg",
+    "RightUpLeg",
+    "LeftLeg",
+    "RightLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftUpLeg",
+     "target_rotation": {
+      "x": -15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightUpLeg",
+     "target_rotation": {
+      "x": -15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "LeftLeg",
+     "target_rotation": {
+      "x": 20,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightLeg",
+     "target_rotation": {
+      "x": 20,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "knees_caving": {
+   "highlight_joints": [
+    "LeftUpLeg",
+    "RightUpLeg",
+    "LeftLeg",
+    "RightLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftUpLeg",
+     "target_rotation": {
+      "x": 0,
+      "y": 0,
+      "z": -10
+     }
+    },
+    {
+     "bone_name": "RightUpLeg",
+     "target_rotation": {
+      "x": 0,
+      "y": 0,
+      "z": 10
+     }
+    }
+   ]
+  },
+  "narrow_stance": {
+   "highlight_joints": [
+    "LeftUpLeg",
+    "RightUpLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftUpLeg",
+     "target_rotation": {
+      "x": 0,
+      "y": 0,
+      "z": -12
+     }
+    },
+    {
+     "bone_name": "RightUpLeg",
+     "target_rotation": {
+      "x": 0,
+      "y": 0,
+      "z": 12
+     }
+    }
+   ]
+  },
+  "raise_low": {
+   "highlight_joints": [
+    "LeftArm",
+    "RightArm"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftArm",
+     "target_rotation": {
+      "x": 0,
+      "y": 0,
+      "z": -20
+     }
+    },
+    {
+     "bone_name": "RightArm",
+     "target_rotation": {
+      "x": 0,
+      "y": 0,
+      "z": 20
+     }
+    }
+   ]
+  },
+  "raise_high": {
+   "highlight_joints": [
+    "LeftArm",
+    "RightArm"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftArm",
+     "target_rotation": {
+      "x": 0,
+      "y": 0,
+      "z": 15
+     }
+    },
+    {
+     "bone_name": "RightArm",
+     "target_rotation": {
+      "x": 0,
+      "y": 0,
+      "z": -15
+     }
+    }
+   ]
+  },
+  "squatting": {
+   "highlight_joints": [
+    "LeftUpLeg",
+    "RightUpLeg",
+    "LeftLeg",
+    "RightLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftLeg",
+     "target_rotation": {
+      "x": -20,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightLeg",
+     "target_rotation": {
+      "x": -20,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "Hips",
+     "target_rotation": {
+      "x": 10,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "shallow_hinge": {
+   "highlight_joints": [
+    "Hips",
+    "Spine"
+   ],
+   "actions": [
+    {
+     "bone_name": "Hips",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "LeftUpLeg",
+     "target_rotation": {
+      "x": -15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightUpLeg",
+     "target_rotation": {
+      "x": -15,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "elbows_forward": {
+   "highlight_joints": [
+    "LeftArm",
+    "RightArm"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftArm",
+     "target_rotation": {
+      "x": -12,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightArm",
+     "target_rotation": {
+      "x": -12,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "hips_bent": {
+   "highlight_joints": [
+    "Hips",
+    "Spine"
+   ],
+   "actions": [
+    {
+     "bone_name": "Hips",
+     "target_rotation": {
+      "x": 12,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "LeftUpLeg",
+     "target_rotation": {
+      "x": -12,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightUpLeg",
+     "target_rotation": {
+      "x": -12,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "shallow_side_lunge": {
+   "highlight_joints": [
+    "LeftUpLeg",
+    "RightUpLeg",
+    "LeftLeg",
+    "RightLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftUpLeg",
+     "target_rotation": {
+      "x": -12,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightUpLeg",
+     "target_rotation": {
+      "x": -12,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "LeftLeg",
+     "target_rotation": {
+      "x": 20,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightLeg",
+     "target_rotation": {
+      "x": 20,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "bent_straight_leg": {
+   "highlight_joints": [
+    "LeftLeg",
+    "RightLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftLeg",
+     "target_rotation": {
+      "x": -15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightLeg",
+     "target_rotation": {
+      "x": -15,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "standing_up": {
+   "highlight_joints": [
+    "Hips",
+    "Spine"
+   ],
+   "actions": [
+    {
+     "bone_name": "Hips",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "LeftUpLeg",
+     "target_rotation": {
+      "x": -15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightUpLeg",
+     "target_rotation": {
+      "x": -15,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "short_pull": {
+   "highlight_joints": [
+    "LeftArm",
+    "RightArm",
+    "LeftForeArm",
+    "RightForeArm"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftArm",
+     "target_rotation": {
+      "x": 20,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightArm",
+     "target_rotation": {
+      "x": 20,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "LeftForeArm",
+     "target_rotation": {
+      "x": -20,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightForeArm",
+     "target_rotation": {
+      "x": -20,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "partial_sit_up": {
+   "highlight_joints": [
+    "Spine",
+    "Spine1"
+   ],
+   "actions": [
+    {
+     "bone_name": "Spine",
+     "target_rotation": {
+      "x": 15,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "Spine1",
+     "target_rotation": {
+      "x": 10,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "bent_knees": {
+   "highlight_joints": [
+    "LeftLeg",
+    "RightLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftLeg",
+     "target_rotation": {
+      "x": -20,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightLeg",
+     "target_rotation": {
+      "x": -20,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "low_raise": {
+   "highlight_joints": [
+    "LeftUpLeg",
+    "RightUpLeg"
+   ],
+   "actions": [
+    {
+     "bone_name": "LeftUpLeg",
+     "target_rotation": {
+      "x": -20,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "RightUpLeg",
+     "target_rotation": {
+      "x": -20,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "head_down": {
+   "highlight_joints": [
+    "Head",
+    "Neck"
+   ],
+   "actions": [
+    {
+     "bone_name": "Head",
+     "target_rotation": {
+      "x": -13,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "Neck",
+     "target_rotation": {
+      "x": -4,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  },
+  "forward_head": {
+   "highlight_joints": [
+    "Head",
+    "Neck",
+    "Spine1"
+   ],
+   "actions": [
+    {
+     "bone_name": "Head",
+     "target_rotation": {
+      "x": -8,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "Neck",
+     "target_rotation": {
+      "x": -4,
+      "y": 0,
+      "z": 0
+     }
+    },
+    {
+     "bone_name": "Spine1",
+     "target_rotation": {
+      "x": -4,
+      "y": 0,
+      "z": 0
+     }
+    }
+   ]
+  }
+ },
+ "exercise_overrides": {
+  "front_raise": {
+   "raise_low": {
+    "highlight_joints": [
+     "LeftArm",
+     "RightArm"
+    ],
+    "actions": [
+     {
+      "bone_name": "LeftArm",
+      "target_rotation": {
+       "x": -20,
+       "y": 0,
+       "z": 0
+      }
+     },
+     {
+      "bone_name": "RightArm",
+      "target_rotation": {
+       "x": -20,
+       "y": 0,
+       "z": 0
+      }
+     }
+    ]
+   }
+  }
+ }
+}

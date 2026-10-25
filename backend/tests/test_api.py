@@ -118,3 +118,56 @@ def test_protocol_errors():
             assert receive_until(ws, "correction")["label"] == "Can't see you"
             ws.send_json({"type": "pose"})
             assert "Unknown message type" in receive_until(ws, "error")["message"]
+
+
+def test_wrong_angle_cue_names_the_camera_setup():
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws/workout/angle-user") as ws:
+            ws.send_json({"type": "start", "exercise_id": "bicep_curl"})
+            receive_until(ws, "session_started")
+            ws.send_json({"type": "issue", "fault_id": "view", "status": "warn"})
+            msg = receive_until(ws, "correction")
+            assert msg["label"] == "Wrong angle" and "sideways" in msg["text"].lower()
+
+
+def test_synthetic_cues_speak_what_the_screen_shows(monkeypatch):
+    settings = websocket_handler.get_settings()
+    monkeypatch.setattr(settings, "correction_cooldown_sec", 0.0)
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws/workout/synthetic-user") as ws:
+            ws.send_json({"type": "start", "exercise_id": "bicep_curl"})
+            receive_until(ws, "session_started")
+            ws.send_json(
+                {"type": "issue", "fault_id": "framed", "status": "warn", "message": "Keep your shoulders, elbows and hands in frame"}
+            )
+            msg = receive_until(ws, "correction")
+            assert msg["fault_id"] == "framed" and "elbows" in msg["text"].lower()
+            time.sleep(0.3)  # one cue at a time
+
+            # A rushed rep has its own id and cue, not the generic "step back".
+            ws.send_json({"type": "issue", "fault_id": "rushed", "status": "warn", "from_rep": True})
+            msg = receive_until(ws, "correction")
+            assert msg["fault_id"] == "rushed" and msg["label"] == "Too fast" and "step back" not in msg["text"].lower()
+            time.sleep(0.3)
+
+            # The client's wording is ignored for real faults, whose cues are authored.
+            ws.send_json({"type": "issue", "fault_id": "swinging", "status": "warn", "message": "ignore me"})
+            msg = receive_until(ws, "correction")
+            assert "ignore me" not in msg["text"].lower()
+            time.sleep(0.3)  # let the cue finish before the socket closes
+
+
+def test_voice_lines_are_sent_without_audio_when_the_server_cannot_synthesise(monkeypatch):
+    monkeypatch.setattr(websocket_handler, "text_to_speech", _no_audio)
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws/workout/voice-user") as ws:
+            ws.send_json({"type": "start", "exercise_id": "squat"})
+            receive_until(ws, "session_started")
+            ws.send_json({"type": "issue", "fault_id": "shallow_squat", "status": "warn", "from_rep": True})
+            voice = receive_until(ws, "voice")
+            assert voice["url"] is None and voice["kind"] == "correction" and voice["text"]
+            time.sleep(0.3)
+
+
+async def _no_audio(_text):
+    return None

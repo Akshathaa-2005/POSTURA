@@ -2,6 +2,7 @@ import { useFormModel } from "@/hooks/useFormModel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Exercise, FormIssue, RepEvent } from "@/types";
+import type { Landmark } from "@/types/mediapipe";
 import { usePoseDetection, type PoseResultsHandler } from "@/hooks/usePoseDetection";
 import { useWorkoutState } from "@/hooks/useWorkoutState";
 import { WorkoutEngine } from "@/utils/workoutEngine";
@@ -22,6 +23,10 @@ interface Props {
   onCoachIssue?: (issue: FormIssue) => void;
   /** A run of clean reps worth encouraging. */
   onPraise?: () => void;
+  /** Live landmarks ref passed to 3D avatar for 60 FPS real-time motion mimicry */
+  liveLandmarksRef?: React.MutableRefObject<Landmark[] | null>;
+  /** Receives the video's width / height alongside the live landmarks */
+  liveAspectRef?: React.MutableRefObject<number>;
 }
 
 /** How often (ms) the React dashboard is refreshed; the canvas updates every frame regardless. */
@@ -38,6 +43,8 @@ export default function VideoPoseContainer({
   onRepEvent,
   onCoachIssue,
   onPraise,
+  liveLandmarksRef,
+  liveAspectRef,
 }: Props) {
   const callbacks = useRef({ onRepEvent, onCoachIssue, onPraise });
   callbacks.current = { onRepEvent, onCoachIssue, onPraise };
@@ -70,6 +77,12 @@ export default function VideoPoseContainer({
         angles: snap.angles,
         updatedAt: now,
       };
+      if (liveLandmarksRef) {
+        liveLandmarksRef.current = snap.landmarks;
+      }
+      if (liveAspectRef && height > 0) {
+        liveAspectRef.current = width / height;
+      }
       if (snap.repEvent) {
         pendingEvent.current = snap.repEvent;
         const ev = snap.repEvent;
@@ -95,17 +108,20 @@ export default function VideoPoseContainer({
         pendingEvent.current = null;
       }
     },
-    [engine, exercise.id, dims.width, dims.height, applySnapshot],
+    [engine, exercise.id, dims.width, dims.height, applySnapshot, liveLandmarksRef, liveAspectRef],
   );
 
   const { status, error } = usePoseDetection(videoRef, { enabled: cameraOn, paused, onResults });
 
   useEffect(() => setStatus(status, error), [status, error, setStatus]);
 
-  // Don't count time across a pause as active workout time.
+  // Don't count time across a pause as active workout time, and clear live stream on stop.
   useEffect(() => {
     lastFrameAt.current = null;
-  }, [paused, cameraOn]);
+    if (!cameraOn && liveLandmarksRef) {
+      liveLandmarksRef.current = null;
+    }
+  }, [paused, cameraOn, liveLandmarksRef]);
 
   // Dismiss the rep pop shortly after it appears.
   useEffect(() => {
@@ -180,7 +196,11 @@ export default function VideoPoseContainer({
         {status === "running" && (!personVisible || !inFrame) && (
           <div className="absolute inset-x-0 top-4 flex justify-center px-4">
             <div className="rounded-full bg-linen/90 px-5 py-2 text-sm text-ink shadow-soft backdrop-blur">
-              {personVisible ? `Adjust position: ${exercise.camera_setup.toLowerCase()}` : "Step into the frame"}
+              {personVisible
+                ? `Adjust position: ${exercise.camera_setup.toLowerCase()}`
+                : exercise.body_scope === "upper"
+                  ? "Can't find you: move back so your head, shoulders and arms are in frame"
+                  : "Can't find you: move back so your whole body is in frame"}
             </div>
           </div>
         )}

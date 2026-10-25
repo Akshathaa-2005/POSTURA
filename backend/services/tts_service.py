@@ -1,4 +1,7 @@
-"""Converts correction text to browser-playable WAV files using pyttsx3 (local, free)."""
+"""Converts correction text to browser-playable WAV files using pyttsx3 (local, free).
+
+Engines: NSSpeechSynthesizer (macOS), SAPI5 (Windows), eSpeak (Linux). When none works the server still sends each line
+with no audio and the browser speaks it (see frontend `useCoachVoice`), so coaching is spoken on every OS."""
 
 import asyncio
 import hashlib
@@ -75,7 +78,11 @@ def tts_available() -> bool:
         import pyttsx3  # noqa: F401
     except ImportError:
         return False
-    return sys.platform != "darwin" or shutil.which("afconvert") is not None
+    if sys.platform == "darwin":
+        return shutil.which("afconvert") is not None
+    if sys.platform.startswith("linux"):  # pyttsx3 drives eSpeak there
+        return any(shutil.which(b) for b in ("espeak-ng", "espeak"))
+    return True  # Windows: SAPI5, which ships with the OS
 
 
 def cleanup_old_audio() -> int:
