@@ -5,9 +5,11 @@ import { useRouter } from "next/router";
 import AvatarCoach3D from "@/components/AvatarCoach3D";
 import DashboardPanel from "@/components/DashboardPanel";
 import Layout from "@/components/Layout";
+import PoseGuidanceMode from "@/components/PoseGuidancePanel";
 import VideoPoseContainer from "@/components/VideoPoseContainer";
 import WorkoutHUD from "@/components/WorkoutHUD";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { useCoachVoicePlayback } from "@/hooks/useSpeech";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useWorkoutState } from "@/hooks/useWorkoutState";
 import type { Exercise } from "@/types";
@@ -22,6 +24,11 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
   const [mirrored, setMirrored] = useLocalStorage("aicoach.mirrored", true);
   const [showAngles, setShowAngles] = useLocalStorage("aicoach.showAngles", false);
   const [showAvatar, setShowAvatar] = useLocalStorage("aicoach.showAvatar", true);
+  // Pose-guidance mode: separate from normal coaching. Compares joint angles with the target pose and
+  // speaks corrections locally; the backend coach (cues, praise, session saving) is not used in this mode.
+  const [guidanceMode, setGuidanceMode] = useLocalStorage("postura.poseGuidance", false);
+  const [guidanceVoice, setGuidanceVoice] = useLocalStorage("aicoach.guidanceVoice", true);
+  const [coachVoice, setCoachVoice] = useLocalStorage("aicoach.voice", true);
   const router = useRouter();
 
   // Shared 60 FPS live pose landmarks ref connecting VideoPoseContainer to AvatarCoach3D
@@ -49,7 +56,13 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
     reset(exercise.id, exercise.rep_target);
   }, [exercise, sessionKey, reset]);
 
-  const { sendRep, sendIssue, sendPraise } = useWebSocket({ exerciseId: exercise.id, active: cameraOn, sessionKey });
+  const { sendRep, sendIssue, sendPraise } = useWebSocket({
+    exerciseId: exercise.id,
+    active: cameraOn && !guidanceMode,
+    sessionKey,
+  });
+  // The sidebar layout has its own player; the avatar layout needs this one.
+  useCoachVoicePlayback(showAvatar && !guidanceMode && coachVoice);
 
   const start = () => {
     setPaused(false);
@@ -80,6 +93,10 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
         <div className="flex flex-wrap gap-2">
           <Toggle active={mirrored} onClick={() => setMirrored((m) => !m)}>Mirror</Toggle>
           <Toggle active={showAngles} onClick={() => setShowAngles((v) => !v)}>Angles</Toggle>
+          <Toggle active={guidanceMode} onClick={() => setGuidanceMode((v) => !v)}>Pose Guidance</Toggle>
+          {showAvatar && !guidanceMode && (
+            <Toggle active={coachVoice} onClick={() => setCoachVoice((v) => !v)}>Voice</Toggle>
+          )}
           <Toggle active={showAvatar} onClick={() => setShowAvatar((v) => !v)}>50/50 Avatar</Toggle>
           {record && <Toggle active onClick={() => setRecord(false)}>Recording</Toggle>}
           <ControlButton disabled={!live} onClick={() => setPaused((p) => !p)}>
@@ -100,6 +117,9 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
         <div className="space-y-6 max-w-[1440px] mx-auto">
           {/* Unified Bounded Telemetry & Guidance HUD */}
           <WorkoutHUD exercise={exercise} cameraOn={cameraOn} />
+          {guidanceMode && (
+            <PoseGuidanceMode exercise={exercise} voiceOn={guidanceVoice} onVoiceToggle={() => setGuidanceVoice((v) => !v)} />
+          )}
 
           {/* 50/50 Split View: Left = User Video Feed, Right = 3D Humanoid Avatar */}
           <section
@@ -128,8 +148,8 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
                   sessionKey={sessionKey}
                   onStart={start}
                   onRepEvent={sendRep}
-                  onCoachIssue={sendIssue}
-                  onPraise={sendPraise}
+                  onCoachIssue={guidanceMode ? undefined : sendIssue}
+                  onPraise={guidanceMode ? undefined : sendPraise}
                   liveLandmarksRef={liveLandmarksRef}
                   liveAspectRef={liveAspectRef}
                 />
@@ -189,11 +209,16 @@ export default function WorkoutPage({ exercise }: { exercise: Exercise }) {
             sessionKey={sessionKey}
             onStart={start}
             onRepEvent={sendRep}
-            onCoachIssue={sendIssue}
-            onPraise={sendPraise}
+            onCoachIssue={guidanceMode ? undefined : sendIssue}
+            onPraise={guidanceMode ? undefined : sendPraise}
             liveLandmarksRef={liveLandmarksRef}
           />
-          <DashboardPanel exercise={exercise} mirrored={mirrored} record={record} showAvatar={false} />
+          <div className="space-y-6">
+            {guidanceMode && (
+              <PoseGuidanceMode exercise={exercise} voiceOn={guidanceVoice} onVoiceToggle={() => setGuidanceVoice((v) => !v)} />
+            )}
+            <DashboardPanel exercise={exercise} mirrored={mirrored} record={record} showAvatar={false} />
+          </div>
         </div>
       )}
     </Layout>

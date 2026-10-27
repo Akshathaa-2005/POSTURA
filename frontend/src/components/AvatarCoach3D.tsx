@@ -1,5 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import type { AvatarCommand } from "@/types";
 import type { Landmark } from "@/types/mediapipe";
 import { solveLandmarksToAvatar } from "@/utils/kinematicSolver";
@@ -16,6 +20,13 @@ import {
 } from "@/utils/avatarRig";
 import type { GroundAnchor } from "@/utils/avatarRig";
 import { clampAnatomicalRotation } from "@/utils/kinematicSolver";
+import { createGlbRetargeter, findGlbBones, fitScaleToRig, missingRigBones } from "@/utils/glbRetarget";
+import type { GlbRetargeter } from "@/utils/glbRetarget";
+
+/** Blender-exported character (see docs/blender-export.md). Served from frontend/public/models. */
+const AVATAR_MODEL_URL = "/models/avatar.glb";
+
+type ModelStatus = "loading" | "ready" | "error";
 
 interface Props {
   command?: AvatarCommand | null;
@@ -61,6 +72,9 @@ export default function AvatarCoach3D({
   const [viewAngle, setViewAngle] = useState<"perspective" | "side" | "front">(defaultView);
   const [visMode, setVisMode] = useState<AvatarVisualizationMode>("rig"); // defaults to Figure 3 (Kinematic Rig)
   const [controlMode, setControlMode] = useState<AvatarControlMode>("mimic");
+  // glb load state; on "error" the procedural clay body below stays visible as a fallback
+  const [modelStatus, setModelStatus] = useState<ModelStatus>("loading");
+  const [modelProgress, setModelProgress] = useState<number | null>(null);
 
   // Keep latest props available to the requestAnimationFrame loop without scene rebuilding
   const controlModeRef = useRef(controlMode);
@@ -328,7 +342,7 @@ export default function AvatarCoach3D({
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
+    renderer.toneMappingExposure = 1.0;
     rendererRef.current = renderer;
     mount.appendChild(renderer.domElement);
 
@@ -346,26 +360,35 @@ export default function AvatarCoach3D({
     orbitGroup.add(bandsOverlayGroup);
 
     // Studio Lighting setup to sculpt anatomical muscle contours
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+    // Soft, even base light: sky/ground hemisphere instead of flat ambient
+    const ambientLight = new THREE.HemisphereLight(0xf4f6fa, 0x6b7280, 0.85);
     scene.add(ambientLight);
 
     // Key light (angled high front-right)
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.6);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.05);
     keyLight.position.set(2.4, 4.0, 3.2);
     keyLight.castShadow = true;
-    keyLight.shadow.mapSize.set(1024, 1024);
+    keyLight.shadow.mapSize.set(2048, 2048);
+    keyLight.shadow.radius = 5;
     keyLight.shadow.bias = -0.0004;
     scene.add(keyLight);
 
     // Fill light (softer cool light from left)
-    const fillLight = new THREE.DirectionalLight(0xb0c4de, 0.6);
+    const fillLight = new THREE.DirectionalLight(0xc8d4e6, 0.55);
     fillLight.position.set(-2.8, 2.0, 2.2);
     scene.add(fillLight);
 
     // Rim back-light (creates crisp silhouette seen in anatomical reference scans)
-    const rimLight = new THREE.DirectionalLight(0xffffff, 1.25);
+    const rimLight = new THREE.DirectionalLight(0xffffff, 0.7);
     rimLight.position.set(0, 2.8, -3.2);
     scene.add(rimLight);
+
+    // Image-based light so glb PBR materials (metalness, clearcoat, ...) don't render black
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = envTexture;
+    scene.environmentIntensity = 0.45;
+    pmrem.dispose();
 
     // Dark floor pedestal
     const floorGeo = new THREE.CircleGeometry(1.4, 64);
@@ -384,16 +407,16 @@ export default function AvatarCoach3D({
     // Anatomical Clay Shader (Neutral Gray Matte Clay)
     // ========================================================
     const clayMat = new THREE.MeshStandardMaterial({
-      color: 0x8e959e, // Matte clay tone matching SMPL reference
-      roughness: 0.44,
-      metalness: 0.08,
+      color: 0xaeb4bd, // Light neutral grey; red joints/bands are the single accent
+      roughness: 0.68,
+      metalness: 0.0,
     });
 
     // Darker tone for muscular crevices and contours
     const contourMat = new THREE.MeshStandardMaterial({
-      color: 0x7c838d,
-      roughness: 0.48,
-      metalness: 0.06,
+      color: 0x9aa1ab,
+      roughness: 0.7,
+      metalness: 0.0,
     });
 
     // Kinematic Rig materials (Figure 3)
@@ -465,7 +488,7 @@ export default function AvatarCoach3D({
     const hipsJoint = makeJoint("Hips", 0.03);
 
     // Anatomical Pelvis & Gluteal Muscle Volume
-    const pelvisGeo = new THREE.CylinderGeometry(0.145, 0.128, 0.16, 24);
+    const pelvisGeo = new THREE.CylinderGeometry(0.145, 0.128, 0.16, 48, 4);
     pelvisGeo.scale(1.12, 1.0, 0.88);
     const pelvisMesh = new THREE.Mesh(pelvisGeo, clayMat);
     pelvisMesh.position.set(0, -0.015, 0);
@@ -477,7 +500,7 @@ export default function AvatarCoach3D({
     const spineJoint = makeJoint("Spine", 0.024);
 
     // Abdominal wall with tapered athletic waist
-    const lumbarGeo = new THREE.CylinderGeometry(0.138, 0.144, 0.12, 24);
+    const lumbarGeo = new THREE.CylinderGeometry(0.138, 0.144, 0.12, 48, 4);
     lumbarGeo.scale(1.08, 1.0, 0.86);
     const lumbarMesh = new THREE.Mesh(lumbarGeo, clayMat);
     lumbarMesh.position.set(0, 0.06, 0);
@@ -490,7 +513,7 @@ export default function AvatarCoach3D({
     const chestJoint = makeJoint("Spine1", 0.026);
 
     // Sculpted Muscular Chest & Latissimus Dorsi
-    const thoraxGeo = new THREE.CylinderGeometry(0.165, 0.14, 0.19, 28);
+    const thoraxGeo = new THREE.CylinderGeometry(0.165, 0.14, 0.19, 48, 6);
     thoraxGeo.scale(1.18, 1.0, 0.82); // broad chest, muscular athletic V-taper
     const thoraxMesh = new THREE.Mesh(thoraxGeo, clayMat);
     thoraxMesh.position.set(0, 0.095, 0.005);
@@ -498,7 +521,7 @@ export default function AvatarCoach3D({
     spine1.add(thoraxMesh);
 
     // Defined Pectoral Major Plates (Left and Right)
-    const leftPecGeo = new THREE.BoxGeometry(0.11, 0.08, 0.04);
+    const leftPecGeo = new RoundedBoxGeometry(0.11, 0.08, 0.04, 6, 0.016);
     leftPecGeo.scale(1.0, 1.0, 0.8);
     const leftPec = new THREE.Mesh(leftPecGeo, contourMat);
     leftPec.position.set(-0.065, 0.115, 0.075);
@@ -517,7 +540,7 @@ export default function AvatarCoach3D({
     neckRef.current = neck;
     const neckJoint = makeJoint("Neck", 0.022);
 
-    const neckGeo = new THREE.CylinderGeometry(0.046, 0.054, 0.085, 20);
+    const neckGeo = new THREE.CylinderGeometry(0.046, 0.054, 0.085, 36, 2);
     const neckMesh = new THREE.Mesh(neckGeo, clayMat);
     neckMesh.position.set(0, 0.04, 0);
     neckMesh.castShadow = true;
@@ -529,7 +552,7 @@ export default function AvatarCoach3D({
     const headJoint = makeJoint("Head", 0.024);
 
     // Anatomical Cranium & Sculpted Facial Structure
-    const craniumGeo = new THREE.SphereGeometry(0.088, 28, 28);
+    const craniumGeo = new THREE.SphereGeometry(0.088, 48, 48);
     craniumGeo.scale(0.92, 1.16, 1.04);
     const cranium = new THREE.Mesh(craniumGeo, clayMat);
     cranium.position.set(0, 0.078, 0);
@@ -537,19 +560,19 @@ export default function AvatarCoach3D({
     head.add(cranium);
 
     // Sculpted Jawline & Chin
-    const jawGeo = new THREE.BoxGeometry(0.054, 0.042, 0.065);
+    const jawGeo = new RoundedBoxGeometry(0.054, 0.042, 0.065, 6, 0.015);
     const jaw = new THREE.Mesh(jawGeo, contourMat);
     jaw.position.set(0, 0.025, 0.045);
     jaw.rotation.x = -0.2;
     head.add(jaw);
 
     // Brow & Nose Bridge Definition
-    const browGeo = new THREE.BoxGeometry(0.07, 0.016, 0.03);
+    const browGeo = new RoundedBoxGeometry(0.07, 0.016, 0.03, 6, 0.007);
     const brow = new THREE.Mesh(browGeo, contourMat);
     brow.position.set(0, 0.085, 0.076);
     head.add(brow);
 
-    const noseGeo = new THREE.ConeGeometry(0.016, 0.038, 4);
+    const noseGeo = new THREE.ConeGeometry(0.016, 0.038, 16);
     noseGeo.rotateX(Math.PI / 4.2);
     const nose = new THREE.Mesh(noseGeo, clayMat);
     nose.position.set(0, 0.064, 0.085);
@@ -560,7 +583,7 @@ export default function AvatarCoach3D({
     const leftHipJoint = makeJoint("LeftUpLeg", 0.026);
 
     // Anatomical Quadriceps Thigh (broader at top, defined teardrop)
-    const thighGeo = new THREE.CapsuleGeometry(0.064, 0.28, 16, 24);
+    const thighGeo = new THREE.CapsuleGeometry(0.064, 0.28, 16, 48);
     thighGeo.scale(1.05, 1.0, 1.15); // muscular anterior curve
     const leftThigh = new THREE.Mesh(thighGeo, clayMat);
     leftThigh.position.set(0, -0.18, 0);
@@ -571,14 +594,14 @@ export default function AvatarCoach3D({
     const leftKneeJoint = makeJoint("LeftLeg", 0.026);
 
     // Defined Patella (Kneecap)
-    const patellaGeo = new THREE.SphereGeometry(0.032, 16, 16);
+    const patellaGeo = new THREE.SphereGeometry(0.032, 24, 24);
     patellaGeo.scale(1.0, 1.1, 0.7);
     const leftPatella = new THREE.Mesh(patellaGeo, contourMat);
     leftPatella.position.set(0, 0, 0.04);
     leftLeg.add(leftPatella);
 
     // Calf (Gastrocnemius contour tapering to Achilles)
-    const calfGeo = new THREE.CapsuleGeometry(0.048, 0.3, 16, 24);
+    const calfGeo = new THREE.CapsuleGeometry(0.048, 0.3, 16, 48);
     calfGeo.scale(1.0, 1.0, 1.15); // muscular posterior curve
     const leftCalf = new THREE.Mesh(calfGeo, clayMat);
     leftCalf.position.set(0, -0.19, -0.005);
@@ -588,7 +611,7 @@ export default function AvatarCoach3D({
     const leftFoot = bones.get("LeftFoot")!;
     const leftAnkleJoint = makeJoint("LeftFoot", 0.022);
 
-    const footGeo = new THREE.BoxGeometry(0.076, 0.055, 0.17);
+    const footGeo = new RoundedBoxGeometry(0.076, 0.055, 0.17, 6, 0.02);
     const leftFootMesh = new THREE.Mesh(footGeo, clayMat);
     leftFootMesh.position.set(0, -0.02, 0.045);
     leftFootMesh.castShadow = true;
@@ -628,14 +651,14 @@ export default function AvatarCoach3D({
     const leftShoulderJoint = makeJoint("LeftArm", 0.026);
 
     // Sculpted Deltoid Cap
-    const deltoidGeo = new THREE.SphereGeometry(0.052, 18, 18);
+    const deltoidGeo = new THREE.SphereGeometry(0.052, 32, 32);
     deltoidGeo.scale(0.9, 1.25, 1.0);
     const leftDeltoid = new THREE.Mesh(deltoidGeo, contourMat);
     leftDeltoid.position.set(-0.01, -0.02, 0);
     leftArm.add(leftDeltoid);
 
     // Bicep/Tricep Upper Arm
-    const bicepGeo = new THREE.CapsuleGeometry(0.042, 0.18, 16, 20);
+    const bicepGeo = new THREE.CapsuleGeometry(0.042, 0.18, 16, 40);
     const leftBicep = new THREE.Mesh(bicepGeo, clayMat);
     leftBicep.position.set(0, -0.13, 0);
     leftBicep.castShadow = true;
@@ -645,7 +668,7 @@ export default function AvatarCoach3D({
     const leftElbowJoint = makeJoint("LeftForeArm", 0.024);
 
     // Forearm
-    const forearmGeo = new THREE.CapsuleGeometry(0.036, 0.18, 16, 20);
+    const forearmGeo = new THREE.CapsuleGeometry(0.036, 0.18, 16, 40);
     const leftForearmMesh = new THREE.Mesh(forearmGeo, clayMat);
     leftForearmMesh.position.set(0, -0.12, 0);
     leftForearmMesh.castShadow = true;
@@ -655,7 +678,7 @@ export default function AvatarCoach3D({
     leftWristJoint.position.set(0, -0.22, 0);
     leftForeArm.add(leftWristJoint);
 
-    const handGeo = new THREE.BoxGeometry(0.04, 0.07, 0.028);
+    const handGeo = new RoundedBoxGeometry(0.04, 0.07, 0.028, 6, 0.012);
     const leftHand = new THREE.Mesh(handGeo, clayMat);
     leftHand.position.set(0, -0.25, 0);
     leftForeArm.add(leftHand);
@@ -740,6 +763,27 @@ export default function AvatarCoach3D({
     makeBandRing(0.038, 0.038, -0.21, leftForeArm);
     makeBandRing(0.038, 0.038, -0.21, rightForeArm);
 
+    // ========================================================
+    // Silhouette outline: inverted-hull shell per body mesh
+    // ========================================================
+    const outlineMat = new THREE.MeshBasicMaterial({ color: 0x1c2027, side: THREE.BackSide });
+    outlineMat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader.replace(
+        "#include <begin_vertex>",
+        "vec3 transformed = position + normalize(normal) * 0.0035;"
+      );
+    };
+    const bodyMeshes: THREE.Mesh[] = [];
+    orbitGroup.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && (m.material === clayMat || m.material === contourMat)) bodyMeshes.push(m);
+    });
+    bodyMeshes.forEach((m) => {
+      const shell = new THREE.Mesh(m.geometry, outlineMat);
+      shell.renderOrder = -1;
+      m.add(shell);
+    });
+
     // Initial overlay mode visibility
     rigOverlayGroup.visible = visMode === "rig" || visMode === "full";
     bandsOverlayGroup.visible = visMode === "bands" || visMode === "full";
@@ -756,6 +800,64 @@ export default function AvatarCoach3D({
     centerAvatar(bones, orbitGroup, groundingRef.current);
 
     setCameraPreset(defaultView);
+
+    // ========================================================
+    // Blender glb character (async). The logical rig above keeps driving all motion; the glb is
+    // retargeted onto it every frame. The procedural clay body is only the loading / error fallback.
+    // ========================================================
+    let disposed = false;
+    let retargeter: GlbRetargeter | null = null;
+    let glbRoot: THREE.Object3D | null = null;
+    setModelStatus("loading");
+    setModelProgress(null);
+
+    const loader = new GLTFLoader();
+    loader.setMeshoptDecoder(MeshoptDecoder);
+    loader.load(
+      AVATAR_MODEL_URL,
+      (gltf) => {
+        if (disposed) return;
+        const model = gltf.scene;
+        const glbBones = findGlbBones(model);
+        const missing = missingRigBones(glbBones);
+        if (missing.length) {
+          console.error(`[AvatarCoach3D] ${AVATAR_MODEL_URL} is missing rig bones: ${missing.join(", ")}`);
+          setModelStatus("error");
+          return;
+        }
+
+        model.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          // Skinned bounds are computed at bind pose; posed limbs would get culled
+          mesh.frustumCulled = false;
+        });
+
+        // Match the logical rig's size (hips height above the floor), then add under the orbit group
+        const scale = fitScaleToRig(model, glbBones.get("Hips")!, bones.get("Hips")!.position.y - FLOOR_Y);
+        model.scale.setScalar(scale);
+        orbitGroup.add(model);
+        retargeter = createGlbRetargeter(bones, glbBones, orbitGroup);
+        retargeter.update();
+        glbRoot = model;
+
+        // Swap the procedural body for the glb. Rig dots/lines must draw through the opaque skin.
+        bodyMeshes.forEach((m) => (m.visible = false));
+        jointMeshes.forEach((m) => ((m.material as THREE.Material).depthTest = false));
+        redLineMat.depthTest = false;
+
+        setModelStatus("ready");
+      },
+      (e) => {
+        if (!disposed && e.total > 0) setModelProgress(Math.min(1, e.loaded / e.total));
+      },
+      (err) => {
+        console.error(`[AvatarCoach3D] Failed to load ${AVATAR_MODEL_URL}`, err);
+        if (!disposed) setModelStatus("error");
+      }
+    );
 
     // Mouse drag handlers
     const onMouseDown = (e: MouseEvent) => {
@@ -865,6 +967,9 @@ export default function AvatarCoach3D({
       // 4. Floor contact: lowest body point rests on the floor, planted feet / hands don't slide
       groundAvatar(bonesRef.current, orbitGroup, groundingRef.current, anchorRef.current, isMimic ? 0.01 : 0);
 
+      // 4b. Copy the finished logical pose onto the glb skeleton
+      retargeter?.update();
+
       // 5. Update Red Kinematic Bone Lines (Figure 3) in World Space
       if (rigOverlayGroup.visible) {
         for (const link of kinematicLinks) {
@@ -925,6 +1030,21 @@ export default function AvatarCoach3D({
     resizeObserver.observe(mount);
 
     return () => {
+      disposed = true;
+      retargeter = null;
+      if (glbRoot) {
+        glbRoot.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          mesh.geometry.dispose();
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          mats.forEach((mat) => {
+            Object.values(mat).forEach((v) => (v as THREE.Texture)?.isTexture && (v as THREE.Texture).dispose());
+            mat.dispose();
+          });
+        });
+      }
+      envTexture.dispose();
       resizeObserver.disconnect();
       if (reqIdRef.current) cancelAnimationFrame(reqIdRef.current);
       domElement.removeEventListener("mousedown", onMouseDown);
@@ -996,6 +1116,22 @@ export default function AvatarCoach3D({
             </>
           )}
         </div>
+
+        {/* glb load indicator (the clay placeholder body is visible underneath until it finishes) */}
+        {modelStatus === "loading" && (
+          <div className="absolute top-3 right-3 z-10 flex items-center gap-2 rounded-full bg-[#10141b]/85 px-3 py-1 text-[11px] text-slate-300 border border-slate-700/50 backdrop-blur-md">
+            <span className="h-3 w-3 rounded-full border-2 border-slate-500 border-t-slate-200 animate-spin" />
+            Loading model{modelProgress !== null ? ` ${Math.round(modelProgress * 100)}%` : "…"}
+          </div>
+        )}
+        {modelStatus === "error" && (
+          <div
+            className="absolute top-3 right-3 z-10 rounded-full bg-amber-900/60 px-3 py-1 text-[11px] text-amber-200 border border-amber-700/50 backdrop-blur-md"
+            title={`Could not load ${AVATAR_MODEL_URL}; showing the built-in placeholder body`}
+          >
+            Model unavailable · placeholder shown
+          </div>
+        )}
 
         {/* Coach verbal cue + phase label overlay — shown during replay demos */}
         {coachCue && (

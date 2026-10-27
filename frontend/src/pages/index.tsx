@@ -1,3 +1,4 @@
+import Link from "next/link";
 import ExerciseSelector from "@/components/ExerciseSelector";
 import Layout from "@/components/Layout";
 import PoseFigure from "@/components/PoseFigure";
@@ -38,6 +39,12 @@ export default function Home() {
             >
               Begin your practice
             </a>
+            <Link
+              href="/plan"
+              className="rounded-full border border-forest px-8 py-3.5 text-sm font-medium tracking-wide text-forest transition hover:bg-forest hover:text-cream"
+            >
+              Get a personal plan
+            </Link>
             <span className="eyebrow">Real-time&nbsp;·&nbsp;Private&nbsp;·&nbsp;Free</span>
           </div>
         </div>

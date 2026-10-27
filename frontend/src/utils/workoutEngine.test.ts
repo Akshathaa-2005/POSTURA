@@ -460,3 +460,60 @@ describe("jumping jacks need the feet, not just the arms", () => {
     expect(last(r).issue).toMatchObject({ id: "unseen", label: "Can't see you" });
   });
 });
+
+describe("score validity (no false maximums)", () => {
+  const squat = getExercise("squat")!;
+  const hide = (lm: Landmark[], ids: number[]) => lm.map((p, i) => (ids.includes(i) ? { ...p, visibility: 0 } : p));
+  const scores = (r: Run) => r.snaps.map((s) => s.score);
+
+  it("idle: standing still scores nothing, instead of 100%", () => {
+    const r = run(new WorkoutEngine(squat), [sidePose({ knee: 175 })], { hold: 90 });
+    expect(scores(r).every((s) => s === null)).toBe(true);
+    expect(last(r).averageScore).toBeNull();
+    expect(last(r).scoreSkip).toBe("idle");
+  });
+
+  it("no pose: nothing in frame scores nothing", () => {
+    const e = new WorkoutEngine(squat);
+    const s = e.process(null, W, H, 0);
+    expect(s.score).toBeNull();
+    expect(s.scoreSkip).toBe("no_pose");
+  });
+
+  it("keeps the last score briefly, then drops it when the person leaves", () => {
+    const e = new WorkoutEngine(squat);
+    const r = run(e, repeat([sidePose({ knee: 175 }), sidePose({ knee: 85, lean: 35 })], 2).concat([sidePose()]));
+    expect(last(r).score).not.toBeNull();
+    let now = r.snaps.length * FRAME_MS;
+    expect(e.process(null, W, H, now).score).not.toBeNull(); // a dropped frame doesn't blank the display
+    now += 1500;
+    expect(e.process(null, W, H, now).score).not.toBeNull();
+    now += 1000;
+    expect(e.process(null, W, H, now).score).toBeNull();
+  });
+
+  it("partial: legs out of view during a squat is not scored", () => {
+    const legsGone = (lm: Landmark[]) => hide(lm, [23, 24, 25, 26, 27, 28]);
+    const r = run(new WorkoutEngine(squat), [legsGone(sidePose()), legsGone(sidePose({ knee: 85, lean: 35 })), legsGone(sidePose())], { hold: 20 });
+    expect(scores(r).every((s) => s === null)).toBe(true);
+  });
+
+  it("full correct: a clean squat scores high while moving", () => {
+    const r = run(new WorkoutEngine(squat), repeat([sidePose({ knee: 175 }), sidePose({ knee: 85, lean: 35 })], 3).concat([sidePose()]));
+    const live = scores(r).filter((s): s is number => s !== null);
+    expect(live.length).toBeGreaterThan(0);
+    expect(Math.min(...live)).toBeGreaterThan(85);
+  });
+
+  it("full incorrect: a squat with the chest dropped scores low", () => {
+    const r = run(new WorkoutEngine(squat), [sidePose(), sidePose({ knee: 90, lean: 65 })], { hold: 40 });
+    expect(last(r).score).not.toBeNull();
+    expect(last(r).score!).toBeLessThan(75);
+  });
+
+  it("the far side being guessed wildly does not change the outcome", () => {
+    const clean = run(new WorkoutEngine(squat), [sidePose(), sidePose({ knee: 85, lean: 35 }), sidePose()]);
+    const wild = run(new WorkoutEngine(squat), [sidePose({ farGarbage: true }), sidePose({ knee: 85, lean: 35, farGarbage: true }), sidePose({ farGarbage: true })]);
+    expect(last(wild).score).toBeCloseTo(last(clean).score!, 0);
+  });
+});

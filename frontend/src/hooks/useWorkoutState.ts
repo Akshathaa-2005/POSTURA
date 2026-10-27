@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { ModelRead } from "@/ml/formModel";
-import type { AvatarCommand, DetectionStatus, FormIssue, JointStatus, RepEvent, RepPhase, ScoreBreakdown } from "@/types";
+import type { AvatarCommand, DetectionStatus, FormIssue, JointAngles, JointStatus, RepEvent, RepPhase, ScoreBreakdown, Side } from "@/types";
 import type { EngineSnapshot } from "@/utils/workoutEngine";
 import type { ConnectionState } from "@/utils/websocket";
 import type { Landmark } from "@/types/mediapipe";
@@ -61,6 +61,9 @@ interface WorkoutState {
   lastEvent: RepEvent | null;
   /** The form model's read of the last rep, when a model is installed. */
   modelRead: (ModelRead & { at: number; repType: RepEvent["type"] }) | null;
+  /** Latest smoothed joint angles and the body sides they are judged on (for pose guidance). */
+  angles: JointAngles;
+  sides: Side[];
   fps: number;
   /** Time spent actively tracking (excludes pauses). */
   activeMs: number;
@@ -100,6 +103,8 @@ const initialMetrics = {
   issueSnapshot: null,
   lastEvent: null,
   modelRead: null,
+  angles: {} as JointAngles,
+  sides: [] as Side[],
   fps: 0,
   activeMs: 0,
 };
@@ -138,6 +143,8 @@ export const useWorkoutState = create<WorkoutState>((set) => ({
       holdMs: s.holdMs,
       phase: s.phase,
       issue: s.issue,
+      angles: s.angles,
+      sides: s.sides,
       // Freeze the pose the moment a new cue appears; keep it while that cue stays up.
       issueSnapshot: !s.issue
         ? null

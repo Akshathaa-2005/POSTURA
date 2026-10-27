@@ -118,3 +118,9 @@ def test_protocol_errors():
             assert receive_until(ws, "correction")["label"] == "Can't see you"
             ws.send_json({"type": "pose"})
             assert "Unknown message type" in receive_until(ws, "error")["message"]
+
+
+def test_tts_endpoint_reports_unavailable_when_disabled():
+    with TestClient(app) as client:  # conftest sets TTS_ENABLED=false
+        assert client.get("/api/tts", params={"text": "Bend your knee"}).status_code == 503
+        assert client.get("/api/tts", params={"text": ""}).status_code == 422
