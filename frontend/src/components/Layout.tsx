@@ -31,7 +31,7 @@ export default function Layout({ title, children, actions }: { title?: string; c
         <main className="mx-auto w-full max-w-[1500px] flex-1 px-5 pb-16 sm:px-8">{children}</main>
         <footer className="mx-auto flex w-full max-w-[1500px] items-center justify-between border-t border-slate/10 px-5 py-6 sm:px-8">
           <span className="eyebrow">@postura</span>
-          <span className="eyebrow">Runs privately in your browser</span>
+          <span className="eyebrow">Your own personal coach</span>
         </footer>
       </div>
     </>

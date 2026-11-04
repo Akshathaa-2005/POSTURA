@@ -4,7 +4,7 @@ Postura is a browser-based form coach. The camera and pose detection run in the 
 leaves the device. A FastAPI backend phrases spoken cues, speaks them, and stores sessions. A separate
 offline script generates the exercise guide photos.
 
-Status as of 4 November 2026. See [README.md](README.md) for how to run it and [docs/TECH_STACK.md](docs/TECH_STACK.md) for a
+Status as of 5 November 2026. See [README.md](README.md) for how to run it and [docs/TECH_STACK.md](docs/TECH_STACK.md) for a
 full walkthrough of the computer-vision and LLM parts.
 
 ## 1. System overview
@@ -21,7 +21,7 @@ full walkthrough of the computer-vision and LLM parts.
    → live faults / rep faults → one cue on screen           └─ user_service ─► SQLite / PostgreSQL
               │                                                                 ▲
               ▼                                          REST: /api/exercises, /api/users/{id}/stats,
- UI: VideoPoseContainer, RepCounter, CurrentIssueCard,      /api/users/{id}/sessions, /api/health
+ UI: VideoPoseContainer, FramingCard, RepCounter, CurrentIssueCard,      /api/users/{id}/sessions, /api/health
      PoseGuide, FormScoreMeter, AICoachOverlay                                  │
               │                                                                 │
  useWebSocket ── sends only detected faults, rep events and session totals ─────┘
@@ -29,6 +29,7 @@ full walkthrough of the computer-vision and LLM parts.
  Plan generator (separate flow, /plan page):
    free text ─► POST /api/plans/generate ─► plans/service.py
         extract profile (LLM) → safety screen (code) → targets (code) → workout (LLM) → meals (LLM) → validated plan
+        LLM calls go to a hosted OpenAI-compatible API (Groq free tier by default), not to a local model.
 
 Avatar coach (in the workout view):
    landmarks ─► kinematicSolver (anatomical limits) ─► logical rig ─► glbRetarget ─► Blender .glb character
@@ -64,14 +65,16 @@ The browser sends the backend only the faults it found, never video or raw landm
 | `backend/Dockerfile`, `docker-compose.yml` | Container setup: backend, PostgreSQL 16, Ollama. |
 | `exercises/ml_spec.json` | Skeleton spec for the form model (joints, window length, normalisation). Read by both the trainer and the browser. |
 | `backend/ml/` | Form-model pipeline: `skeleton.py`, `model.py`, `dataset.py`, `train.py`, `export_onnx.py`, `evaluate.py`, `synthetic.py` (smoke tests only). |
-| `frontend/src/ml/` | `skeleton.ts` (normalisation), `recorder.ts` (per-rep windows), `formModel.ts` (browser inference), `recordingStore.ts` (IndexedDB labels). |
+| `frontend/src/ml/` | `skeleton.ts` (normalisation), `recorder.ts` (per-rep windows), `recordingStore.ts` (IndexedDB labels). `formModel.ts` was removed; see section 6. |
 | `frontend/src/pose/` | Pose robustness layer: One-Euro smoother, gap filler, tempo constraints, YOLO11-pose detector and COCO adapter (dev-only). See `pose/README.md`. |
 | `frontend/src/utils/kinematicSolver.ts`, `avatarRig.ts`, `glbRetarget.ts`, `components/AvatarCoach3D.tsx` | 3D avatar: landmarks to bone rotations (with joint limits), the logical rig, retargeting onto the `.glb`, grounding. |
 | `frontend/public/models/` | Avatar `.glb` / `.blend` files and the YOLO ONNX model. Credits in `docs/AVATAR_CREDITS.md`. |
-| `backend/plans/` | AI plan generator: `service.py` (pipeline), `llm_service.py` (Ollama calls with validation-driven retries), `safety.py`, `nutrition.py`, `prompts.py`, `router.py`. |
+| `backend/plans/` | AI plan generator: `service.py` (pipeline), `llm_service.py` (calls to the hosted API with validation-driven retries and rate-limit waits), `safety.py`, `nutrition.py`, `prompts.py`, `router.py`. |
 | `backend/schemas/avatar.py` | Avatar correction commands and `KinematicClamper`, which sanitises them. |
 | `frontend/src/features/plan/`, `pages/plan/` | Plan form, plan view and client-side validation. |
-| `frontend/src/components/RecordPanel.tsx`, `FormModelCard.tsx` | Record-mode labelling and the "AI form check" card. |
+| `frontend/src/components/RecordPanel.tsx`, `FramingCard.tsx`, `AmbientBackground.tsx` | Record-mode labelling, the camera framing checklist (which body parts are in view), and the drifting page background. |
+| `frontend/src/utils/framing.ts` | Maps each exercise's metrics to the body parts the camera has to see. |
+| `docs/EXERCISE_SOURCES.md` | Which rule thresholds are backed by sources and which are estimates. |
 
 ## 3. Frontend
 
@@ -149,14 +152,14 @@ was considered and not used. **Optional** means it is supported but not on by de
 | MediaPipe Python 0.10.35 | In use (offline) | Backend guide generator | Pinned to the same version as the browser. |
 | Rule-based fault evaluation (joint angles and metrics) | In use | Browser | Hand-set thresholds in `exercises.json`. This is what decides rep counts today, and it is not accurate enough yet. |
 | YOLO11s-pose (Ultralytics, ONNX) | Optional (dev-only) | Browser, onnxruntime-web (WebGPU, WASM fallback) | Runs in the browser, so no frames leave the device. Not used by the workout flow. Reachable at `/dev/pose-compare` to compare against MediaPipe. It tracks 17 keypoints with no feet, which matters for squats and lunges. |
-| **ST-GCN + self-attention rep-form classifier** (own model, 147k parameters) | **Built, not trained on real data** | Browser (`onnxruntime-web`, WebAssembly) | Pipeline, export and browser inference all work and are tested. It has only been trained on synthetic reps, so it is not shipped and has no accuracy figure for real users. See section 6. |
+| **ST-GCN + self-attention rep-form classifier** (own model, 147k parameters) | **Built, not trained on real data; not loaded by the app** | Offline (backend `ml/`) | Training, export and parity checks work and are tested. The browser loader was removed, so nothing runs during a workout. See section 6. |
 
 ### Language models
 
 | Model / tool | Status | Where | Notes |
 |---|---|---|---|
 | Ollama + Mistral 7B | Optional | Backend `correction_generator` | Rephrases authored cues. The server falls back to the authored cue when it is absent. |
-| Ollama + Mistral 7B (or `PLAN_MODEL`) | Optional | Backend `plans/` | Extracts a profile from free text, then writes the workout week and example meal days as JSON. Every output is validated and retried; safety screening and calorie / macro targets are done in code. Returns 503 when Ollama is unavailable. |
+| Hosted LLM via `PLAN_API_URL` (default Groq; `PLAN_MODEL` defaults to `openai/gpt-oss-20b`) | Optional, needs `PLAN_API_KEY` | Backend `plans/` | Extracts a profile from free text, then writes the workout week and example meal days as JSON. Every output is validated and retried; safety screening and calorie / macro targets are done in code. Returns 503 without a key or when the API is unreachable or rate-limited. Free-text input and profile data are sent to the provider. |
 | Vision LLMs (GPT-4V, Claude Vision) for live scoring | Rejected | | Discussed. One to two seconds per frame, costs money, and would send video off the device. Could be used for post-workout review. |
 
 ### Speech
@@ -203,6 +206,8 @@ Generation takes 40 seconds to 8 minutes per attempt on the M3 Mac. Frames are t
 | PostgreSQL 16 | Optional | SQLite is the default. Set `DATABASE_URL` to switch. |
 
 ## 6. Form model (ST-GCN with self-attention)
+
+> **Status update:** the browser loader (`formModel.ts`, `useFormModel`, `FormModelCard`) was removed, so the app no longer loads `public/models/form/`. The backend training and export pipeline is kept for future use.
 
 This replaces nothing yet. The rule engine still decides every rep count and every cue. The model is built so that it
 can be trained on real data and then run next to the rules, and it can only add advice, never change a count.
@@ -272,8 +277,9 @@ plenty of good reps. Until there is a model in `frontend/public/models/form/`, t
 
 ## 7. Known gaps
 
-- **The form model has no real training data**, so it is not used. Collecting labelled reps is the next step.
-- **Plan generation needs Ollama.** Without it, `/api/plans/generate` returns 503; there is no template fallback.
+- **The form model has no real training data**, and the browser loader was removed. Collecting labelled reps is the next step.
+- **Plan generation needs a free API key** (`PLAN_API_KEY`). Without it, `/api/plans/generate` returns 503; there is no template fallback. The free tier limits output tokens per minute, so large plans can hit rate limits and are retried after a wait.
+- **Plan privacy:** the plan form and free-text descriptions are sent to the hosted API provider, so the plan feature does not keep data on the device.
 - **Avatar:** the arms rest tilted 12° outward (`REST_ARM_ABDUCT_DEG`) so the sleeves don't clip into the torso.
 - **Two SQLite API tests are flaky** ("database is locked").
 - **Rep counting is not accurate yet.** The thresholds are estimates. They need real recordings to tune. The debug
@@ -299,4 +305,5 @@ plenty of good reps. Until there is a model in `frontend/public/models/form/`, t
   retried with the error fed back. User text is fenced and declared to be data.
 - **Avatar commands are looked up, not generated.** The LLM only phrases speech; the avatar's movement comes from a
   canonical correction table passed through `KinematicClamper`, so the avatar can't be told to do something impossible.
+- **Plan LLM is a hosted free API:** chosen so the plan feature works without a local model. The trade-off is that plan input leaves the device and goes to the provider; the README documents this.
 - **Single `exercises.json`:** the browser and the server must agree on fault IDs and thresholds.

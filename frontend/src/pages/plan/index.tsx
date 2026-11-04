@@ -36,7 +36,7 @@ export default function PlanPage() {
         <div>
           <p className="eyebrow">Personalised plan</p>
           <h1 className="mt-3 font-display text-5xl text-slate">Training &amp; nutrition, built for you</h1>
-          <p className="mt-3 max-w-xl text-sm text-stone">Generated privately on your own machine. General guidance only, not medical advice.</p>
+          <p className="mt-3 max-w-xl text-sm text-stone">Your own personal coach. General guidance only, not medical advice.</p>
 
           <div className="mt-8">
             {current ? (

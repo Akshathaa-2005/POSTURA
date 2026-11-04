@@ -9,7 +9,7 @@ Real-time AI fitness coaching with in-browser pose detection. See `ARCHITECTURE.
 | 1 | MVP frontend (Next.js, MediaPipe, skeleton, form score, reps, dashboard, exercise selection) | ✅ Done |
 | 2 | FastAPI backend, WebSocket, Postgres, Ollama corrections, TTS | ✅ Done |
 | 3 | 22 exercises incl. timed holds, correction visuals + Stable Diffusion pipeline, LLM prompting, error handling | ✅ Done |
-| 3b | 3D avatar coach (Blender `.glb`, live mimic + corrections), AI workout & diet plan generator (`/plan`), robust pose layer (One-Euro, gap filling), ST-GCN form model (built, awaiting real data) | ✅ Done (see [ARCHITECTURE.md](ARCHITECTURE.md)) |
+| 3b | 3D avatar coach (Blender `.glb`, live mimic + corrections), AI workout & diet plan generator (`/plan`), robust pose layer (One-Euro, gap filling), ST-GCN form model (built, awaiting real data; not loaded in the app), framing checklist and set-complete feedback | ✅ Done (see [ARCHITECTURE.md](ARCHITECTURE.md)) |
 | 4 | Polish, auth, deployment | Not started |
 
 ## Run locally
@@ -27,6 +27,8 @@ cd frontend
 npm install        # also copies MediaPipe WASM + downloads the pose model into public/mediapipe
 npm run dev
 ```
+
+If the frontend opens on another port (Next.js uses 3001 and up when 3000 is busy), add that origin to `CORS_ORIGINS` in `backend/.env` and restart the backend.
 
 Camera access needs `localhost` or HTTPS. All video and pose processing happens in the browser;
 the backend only receives detected faults, rep events and session totals.
@@ -57,6 +59,7 @@ webcam → usePoseDetection (MediaPipe, in-browser)
            ├─ pick sides: front view → both · side view → the side facing the camera
            │    (the far side is mostly guessed by the model, so it is never judged)
            ├─ metrics: joint angles, torso lean, hip sag, hands overhead, stance width…
+           ├─ framing: which body parts the camera can see (FramingCard, until the set is ready)
            ├─ setup gate (e.g. push-up: must be in a plank before anything counts)
            ├─ RepCounter on the exercise's rep metric; min/max of every rep-fault metric per rep
            ├─ a rep counts only if it reaches the count line, has no major fault held during it,
@@ -70,6 +73,23 @@ webcam → usePoseDetection (MediaPipe, in-browser)
             → speak it (pyttsx3 → WAV), paced: ≥6 s between cues, 15 s before repeating one
             → log it (coaching_cues table)
 ```
+
+## Plan generator (`/plan`)
+
+Plans are written by a hosted language model through a free OpenAI-compatible API (Groq by default). Calories, macros and
+safety screening are computed in code.
+
+```bash
+# backend/.env
+PLAN_API_KEY=your_key            # free key: https://console.groq.com/keys
+# optional
+PLAN_API_URL=https://api.groq.com/openai/v1
+PLAN_MODEL=openai/gpt-oss-20b
+```
+
+- Without `PLAN_API_KEY`, `/api/plans/generate` returns 503.
+- The free tier limits requests and output tokens per minute. Rate-limited calls wait 15 s and 30 s, then retry.
+- **Privacy:** the plan form and any free-text description are sent to the provider. Plans are not generated on the device.
 
 ## Pose guides
 
@@ -103,6 +123,8 @@ with use-based restrictions). Without guides, the animated line figure is shown 
 A spatio-temporal graph network (ST-GCN with self-attention) can score each rep next to the rules. It needs labelled
 reps first. Details and measured numbers are in [ARCHITECTURE.md](ARCHITECTURE.md#6-form-model-st-gcn-with-self-attention).
 
+> The app no longer loads the trained model in the browser, so the copy in step 4 has no effect. Steps 1–3 still produce artifacts for offline evaluation.
+
 ```bash
 # 1. Collect: open any workout with ?record=1, do reps, label each (G = good, 1-9 = faults, Enter = save),
 #    press "Download reps", and put the JSON files in backend/ml/data/recordings/
@@ -124,6 +146,8 @@ model refuses to load in a production build.
 ## Adding an exercise
 
 Add an entry to [`exercises/exercises.json`](exercises/exercises.json) (shared by frontend and backend):
+
+Thresholds should be backed by a source where one exists. [docs/EXERCISE_SOURCES.md](docs/EXERCISE_SOURCES.md) lists which values are sourced and which are estimates.
 
 ```jsonc
 "view": "side",                                  // "front" judges both sides; "side" the camera-facing side

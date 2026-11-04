@@ -45,7 +45,7 @@ export default function Home() {
             >
               Get a personal plan
             </Link>
-            <span className="eyebrow">Real-time&nbsp;·&nbsp;Private&nbsp;·&nbsp;Free</span>
+            <span className="eyebrow">Real-time&nbsp;·&nbsp;Personal&nbsp;·&nbsp;Free</span>
           </div>
         </div>
 
