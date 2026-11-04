@@ -7,9 +7,12 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const wasmSrc = path.join(root, "node_modules/@mediapipe/tasks-vision/wasm");
 const outDir = path.join(root, "public/mediapipe");
-const modelPath = path.join(outDir, "models/pose_landmarker_lite.task");
-const MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+// lite = fastest, full = better under occlusion/odd angles (default), heavy = most accurate, slowest.
+// Must match NEXT_PUBLIC_POSE_MODEL_VARIANT in the app (see .env.example).
+const VARIANT = process.env.POSE_MODEL_VARIANT || process.env.NEXT_PUBLIC_POSE_MODEL_VARIANT || "full";
+if (!["lite", "full", "heavy"].includes(VARIANT)) throw new Error(`Unknown POSE_MODEL_VARIANT "${VARIANT}" (lite | full | heavy)`);
+const modelPath = path.join(outDir, `models/pose_landmarker_${VARIANT}.task`);
+const MODEL_URL = `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${VARIANT}/float16/1/pose_landmarker_${VARIANT}.task`;
 
 const exists = (p) => stat(p).then(() => true, () => false);
 

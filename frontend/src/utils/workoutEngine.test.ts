@@ -460,3 +460,102 @@ describe("jumping jacks need the feet, not just the arms", () => {
     expect(last(r).issue).toMatchObject({ id: "unseen", label: "Can't see you" });
   });
 });
+
+describe("score validity (no false maximums)", () => {
+  const squat = getExercise("squat")!;
+  const hide = (lm: Landmark[], ids: number[]) => lm.map((p, i) => (ids.includes(i) ? { ...p, visibility: 0 } : p));
+  const scores = (r: Run) => r.snaps.map((s) => s.score);
+
+  it("idle: standing still scores nothing, instead of 100%", () => {
+    const r = run(new WorkoutEngine(squat), [sidePose({ knee: 175 })], { hold: 90 });
+    expect(scores(r).every((s) => s === null)).toBe(true);
+    expect(last(r).averageScore).toBeNull();
+    expect(last(r).scoreSkip).toBe("idle");
+  });
+
+  it("no pose: nothing in frame scores nothing", () => {
+    const e = new WorkoutEngine(squat);
+    const s = e.process(null, W, H, 0);
+    expect(s.score).toBeNull();
+    expect(s.scoreSkip).toBe("no_pose");
+  });
+
+  it("keeps the last score briefly, then drops it when the person leaves", () => {
+    const e = new WorkoutEngine(squat);
+    const r = run(e, repeat([sidePose({ knee: 175 }), sidePose({ knee: 85, lean: 35 })], 2).concat([sidePose()]));
+    expect(last(r).score).not.toBeNull();
+    let now = r.snaps.length * FRAME_MS;
+    expect(e.process(null, W, H, now).score).not.toBeNull(); // a dropped frame doesn't blank the display
+    now += 1500;
+    expect(e.process(null, W, H, now).score).not.toBeNull();
+    now += 1000;
+    expect(e.process(null, W, H, now).score).toBeNull();
+  });
+
+  it("partial: legs out of view during a squat is not scored", () => {
+    const legsGone = (lm: Landmark[]) => hide(lm, [23, 24, 25, 26, 27, 28]);
+    const r = run(new WorkoutEngine(squat), [legsGone(sidePose()), legsGone(sidePose({ knee: 85, lean: 35 })), legsGone(sidePose())], { hold: 20 });
+    expect(scores(r).every((s) => s === null)).toBe(true);
+  });
+
+  it("full correct: a clean squat scores high while moving", () => {
+    const r = run(new WorkoutEngine(squat), repeat([sidePose({ knee: 175 }), sidePose({ knee: 85, lean: 35 })], 3).concat([sidePose()]));
+    const live = scores(r).filter((s): s is number => s !== null);
+    expect(live.length).toBeGreaterThan(0);
+    expect(Math.min(...live)).toBeGreaterThan(85);
+  });
+
+  it("full incorrect: a squat with the chest dropped scores low", () => {
+    const r = run(new WorkoutEngine(squat), [sidePose(), sidePose({ knee: 90, lean: 65 })], { hold: 40 });
+    expect(last(r).score).not.toBeNull();
+    expect(last(r).score!).toBeLessThan(75);
+  });
+
+  it("the far side being guessed wildly does not change the outcome", () => {
+    const clean = run(new WorkoutEngine(squat), [sidePose(), sidePose({ knee: 85, lean: 35 }), sidePose()]);
+    const wild = run(new WorkoutEngine(squat), [sidePose({ farGarbage: true }), sidePose({ knee: 85, lean: 35, farGarbage: true }), sidePose({ farGarbage: true })]);
+    expect(last(wild).score).toBeCloseTo(last(clean).score!, 0);
+  });
+});
+
+describe("pose robustness", () => {
+  const hk = () => getExercise("high_knees")!;
+  const cycle = [frontPose({}), frontPose({ leftKneeY: 605 }), frontPose({})];
+
+  it("rejects a rep that is faster than the exercise's min_duration_ms, and says why", () => {
+    const fast = { ...hk(), rep: { ...hk().rep!, min_duration_ms: 5000 } };
+    const r = run(new WorkoutEngine(fast), cycle);
+    expect(r.reps).toHaveLength(1);
+    expect(r.reps[0]).toMatchObject({ type: "partial", note: expect.stringContaining("Slow down") });
+    expect(last(r).reps).toBe(0);
+  });
+
+  it("counts the same rep when the tempo limits are satisfied", () => {
+    const ok = { ...hk(), rep: { ...hk().rep!, min_duration_ms: 100, max_duration_ms: 5000 } };
+    const r = run(new WorkoutEngine(ok), cycle);
+    expect(r.reps.map((e) => e.type)).toEqual(["rep"]);
+    expect(r.reps[0].duration_ms).toBeGreaterThan(100);
+  });
+
+  it("keeps the tracked metric measurable through a brief occlusion of the working knee", () => {
+    const eng = new WorkoutEngine(hk());
+    const up = frontPose({ leftKneeY: 605 });
+    const inFrame: boolean[] = [];
+    const frames = [...Array(10).fill(frontPose({})), ...Array(10).fill(up)];
+    frames.forEach((p, i) => {
+      // Both knees go unseen for 4 frames (~130 ms), well under MAX_GAP_MS.
+      const lost = i >= 12 && i < 16;
+      const lm = lost ? p.map((l: Landmark, k: number) => (k === 25 || k === 26 ? { ...l, visibility: 0.05 } : l)) : p;
+      inFrame.push(eng.process(lm, W, H, i * FRAME_MS).inFrame);
+    });
+    expect(inFrame.slice(12, 16)).toEqual([true, true, true, true]);
+  });
+
+  it("does not freeze a joint the model is mis-placing (geometric drop, not low confidence)", () => {
+    // Regression: imputing these held the knee at its old height and delayed the end of the rep.
+    const r = run(new WorkoutEngine(hk()), [
+      frontPose({}), frontPose({ leftKneeY: 605 }), frontPose({}), frontPose({ leftKneeY: 635 }), frontPose({}),
+    ]);
+    expect(r.reps.map((e) => [e.type, e.faults.map((f) => f.rule.id)])).toEqual([["rep", []], ["rep", ["low_knees"]]]);
+  });
+});

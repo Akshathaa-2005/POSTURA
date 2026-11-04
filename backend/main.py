@@ -1,7 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, WebSocket
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -9,9 +9,10 @@ from sqlalchemy import text
 
 from config import get_settings
 from database import engine, init_db
+from plans.router import router as plans_router
 from routes import analytics, exercises, workouts
 from services.correction_generator import ollama_available
-from services.tts_service import cleanup_old_audio, tts_available
+from services.tts_service import cleanup_old_audio, text_to_speech, tts_available
 from websocket_handler import workout_websocket
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -38,6 +39,7 @@ app.add_middleware(
 app.include_router(exercises.router)
 app.include_router(workouts.router)
 app.include_router(analytics.router)
+app.include_router(plans_router)
 app.mount("/audio", StaticFiles(directory=settings.audio_dir), name="audio")
 
 
@@ -62,6 +64,16 @@ async def health():
         "llm": {"available": await ollama_available(), "model": settings.ollama_model},
         "tts": {"available": tts_available()},
     }
+
+
+@app.get("/api/tts")
+async def tts(text: str = Query(min_length=1, max_length=300)):
+    """Speaks a short sentence (used by the browser when it has no voice of its own). Returns the clip's URL."""
+    name = await text_to_speech(text)
+    if name is None:
+        log.warning("TTS request failed or TTS is unavailable")
+        raise HTTPException(status_code=503, detail="Text-to-speech unavailable")
+    return {"url": f"/audio/{name}"}
 
 
 @app.websocket("/ws/workout/{user_id}")

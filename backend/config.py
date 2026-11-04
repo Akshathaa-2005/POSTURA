@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     ollama_model: str = "mistral"
     llm_timeout_sec: float = 25.0
 
+    # Plan generation (plans/): local Ollama only; whole plans are far bigger than a spoken cue.
+    plan_model: str = ""  # empty → ollama_model
+    plan_llm_timeout_sec: float = 240.0
+    plan_llm_attempts: int = 2  # tries per LLM step; failures feed back into the retry
+
     tts_enabled: bool = True
     tts_rate: int = 175
     audio_dir: Path = BASE_DIR / "static" / "audio"

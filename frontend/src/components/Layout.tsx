@@ -19,7 +19,12 @@ export default function Layout({ title, children, actions }: { title?: string; c
               Form · Breath · Flow
             </span>
           </Link>
-          {actions}
+          <nav className="flex items-center gap-5">
+            <Link href="/plan" className="eyebrow transition hover:text-ink">
+              My plan
+            </Link>
+            {actions}
+          </nav>
         </header>
         <main className="mx-auto w-full max-w-[1500px] flex-1 px-5 pb-16 sm:px-8">{children}</main>
         <footer className="mx-auto flex w-full max-w-[1500px] items-center justify-between border-t border-slate/10 px-5 py-6 sm:px-8">

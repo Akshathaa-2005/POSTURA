@@ -26,11 +26,14 @@ import {
   type FrameMetrics,
   type MetricValue,
 } from "./poseValidation";
+import { LandmarkReliability } from "./landmarkReliability";
 import { RepCounter } from "./repCounter";
+import { GapFiller, LandmarkSmoother } from "../pose/occlusion";
+import { checkTempo } from "../pose/repConstraints";
+import { scoreFrame, SCORE_HOLD_MS, visibleFraction, type AssessedRule, type ScoreSkip } from "./formScore";
 import { RepRecorder } from "../ml/recorder";
 
-/** Weight of the newest sample in the exponential moving averages. */
-const LANDMARK_SMOOTHING = 0.6;
+/** Weight of the newest sample in the exponential moving averages (landmarks use a One-Euro filter instead). */
 const METRIC_SMOOTHING = 0.5;
 const SCORE_SMOOTHING = 0.15;
 /** A live fault must persist this long before it's shown or coached (avoids flicker)… */
@@ -61,10 +64,15 @@ export interface EngineSnapshot {
   /** Landmark index → status, for colouring the skeleton. */
   jointStatus: Map<number, JointStatus>;
   angles: JointAngles;
+  /** Body sides being judged: both in front view, the camera-facing one in side view. */
+  sides: Side[];
   /** The rep metric is measurable, so tracking is meaningful. */
   inFrame: boolean;
   setupOk: boolean;
+  /** Live form score 0-100, or null when there is nothing valid to score (no pose, idle, poorly visible). */
   score: number | null;
+  /** Why the current frame wasn't scored, when it wasn't. */
+  scoreSkip: ScoreSkip | null;
   breakdown: ScoreBreakdown;
   averageScore: number | null;
   reps: number;
@@ -93,6 +101,9 @@ export class WorkoutEngine {
   private readonly regions: Set<BodyRegion>;
 
   private smoothed: Landmark[] | null = null;
+  private readonly reliability = new LandmarkReliability();
+  private readonly smoother = new LandmarkSmoother();
+  private readonly gapFiller = new GapFiller();
   private smoothedAngles: JointAngles = {};
   private smoothedMetrics = new Map<string, number>();
   private side: Side = "left";
@@ -101,6 +112,8 @@ export class WorkoutEngine {
   private breakdown: ScoreBreakdown = { upper: null, core: null, lower: null, rom: null };
   private scoreSum = 0;
   private scoreFrames = 0;
+  private lastScoredAt = -Infinity;
+  private scoreSkip: ScoreSkip | null = "no_pose";
   private lastRepQuality: number | null = null;
 
   /** Per-rep min/max of each rep-rule metric, keyed `${metric}:${side}`. */
@@ -141,22 +154,20 @@ export class WorkoutEngine {
       if (this.counter && this.counter.phase !== "start") this.repLostFrames += 1;
       this.smoothed = null;
       this.setupFailSince = null;
-      return this.snapshot({ landmarks: null, angles: {}, inFrame: false, setupOk: true, jointStatus: new Map() });
+      this.reliability.reset();
+      this.smoother.reset();
+      this.gapFiller.reset();
+      this.scoreSkip = "no_pose";
+      this.expireScore(now);
+      return this.snapshot({ landmarks: null, angles: {}, sides: [], inFrame: false, setupOk: true, jointStatus: new Map() });
     }
 
     // 1. Smooth landmarks and angles.
-    this.smoothed = raw.map((p, i) => {
-      const prev = this.smoothed?.[i];
-      return prev
-        ? {
-            x: ema(prev.x, p.x, LANDMARK_SMOOTHING),
-            y: ema(prev.y, p.y, LANDMARK_SMOOTHING),
-            z: ema(prev.z, p.z, LANDMARK_SMOOTHING),
-            visibility: p.visibility,
-          }
-        : p;
-    });
-    const lm = this.smoothed;
+    this.smoothed = this.smoother.smooth(raw, now);
+    // Joints the model can't really see (hidden, crossed, or guessed) are dropped before anything is measured;
+    // ones lost only briefly are carried along with their parent joint so a one-frame dropout doesn't break a rep.
+    const sane = this.reliability.sanitize(this.smoothed, width, height, this.exercise.view === "front");
+    const lm = this.gapFiller.apply(sane.landmarks, sane.unreliable, sane.unseen, now).landmarks;
     const angles = computeJointAngles(lm, width, height);
     for (const [joint, angle] of Object.entries(angles) as [keyof JointAngles, number][]) {
       angles[joint] = this.smoothedAngles[joint] = ema(this.smoothedAngles[joint], angle, METRIC_SMOOTHING);
@@ -196,11 +207,14 @@ export class WorkoutEngine {
     // 4. Live posture faults. While holding a position, "active" and "peak" rules apply.
     const phase: RepPhase = this.counter ? this.counter.phase : setupOk ? "peak" : "start";
     const liveHits: FaultHit[] = [];
+    const assessed: AssessedRule[] = [];
     if (inFrame && setupOk) {
       for (const rule of this.liveRules) {
         if (rule.when === "active" && phase === "start") continue;
         if (rule.when === "peak" && phase !== "peak") continue;
-        const hit = evaluateRule(rule, metricValues(metrics, rule.metric));
+        const values = metricValues(metrics, rule.metric);
+        assessed.push({ rule, evaluable: values.length > 0 });
+        const hit = evaluateRule(rule, values);
         if (hit) liveHits.push(hit);
       }
     }
@@ -223,21 +237,34 @@ export class WorkoutEngine {
       }
     }
 
-    // 5. Score.
-    if (inFrame && setupOk) {
-      const posture = Math.max(0, 100 - liveHits.reduce((s, h) => s + PENALTY[h.status], 0));
-      const frameScore = this.lastRepQuality === null ? posture : (posture + this.lastRepQuality) / 2;
-      this.score = ema(this.score ?? undefined, frameScore, SCORE_SMOOTHING);
-      this.scoreSum += frameScore;
+    // 5. Score — only for valid frames (see formScore.ts); otherwise the last score is held briefly, then dropped.
+    const frame = scoreFrame({
+      inFrame,
+      visibleFraction: visibleFraction(lm, sides),
+      setupOk,
+      active: this.counter ? this.counter.phase !== "start" : true,
+      rules: assessed,
+      hits: liveHits,
+      repQuality: this.lastRepQuality,
+    });
+    this.scoreSkip = frame.skip ?? null;
+    if (frame.score !== null) {
+      this.score = ema(this.score ?? undefined, frame.score, SCORE_SMOOTHING);
+      this.scoreSum += frame.score;
       this.scoreFrames += 1;
+      this.lastScoredAt = now;
       const repHits = now - this.repHitsAt < REP_ISSUE_MS ? this.repHits : [];
       for (const region of ["upper", "core", "lower"] as const) {
         if (!this.regions.has(region)) continue;
+        // A region is only scored from rules that could actually be measured this frame.
+        if (!assessed.some((a) => a.evaluable && METRIC_REGION[a.rule.metric] === region)) continue;
         const penalty = [...liveHits, ...repHits]
           .filter((h) => METRIC_REGION[h.rule.metric] === region)
           .reduce((s, h) => s + PENALTY[h.status], 0);
         this.breakdown[region] = ema(this.breakdown[region] ?? undefined, Math.max(0, 100 - penalty), SCORE_SMOOTHING);
       }
+    } else {
+      this.expireScore(now);
     }
 
     // 6. Pick the cue to show, and whether it's new enough to speak.
@@ -252,8 +279,9 @@ export class WorkoutEngine {
       (!!repEvent && repEvent.type === "rep" && repEvent.faults.length === 0 && this.cleanStreak % PRAISE_EVERY === 0);
 
     return this.snapshot({
-      landmarks: lm,
+      landmarks: this.smoothed,
       angles,
+      sides,
       inFrame,
       setupOk,
       jointStatus: this.jointStatus(sides, liveHits, now),
@@ -262,6 +290,12 @@ export class WorkoutEngine {
       coachIssue,
       praise,
     });
+  }
+
+  private expireScore(now: number) {
+    if (this.score === null || now - this.lastScoredAt <= SCORE_HOLD_MS) return;
+    this.score = null;
+    for (const region of ["upper", "core", "lower"] as const) this.breakdown[region] = null;
   }
 
   private pickSides(lm: Landmark[]): Side[] {
@@ -319,6 +353,7 @@ export class WorkoutEngine {
     if (process.env.NODE_ENV !== "production") {
       console.info("[rep]", count.type, {
         rom: count.rom,
+        duration_ms: count.duration_ms,
         faults: faults.map((f) => `${f.rule.id}:${f.status}@${Math.round(f.value)}`),
         framesInRep: this.repFrames,
         framesLost: this.repLostFrames,
@@ -329,6 +364,8 @@ export class WorkoutEngine {
 
     if (count.type !== "rep") return { ...count, faults };
     if (faults.some((f) => f.status === "bad")) return { ...count, type: "partial", faults };
+    const tempo = checkTempo(this.exercise.rep!, count.duration_ms);
+    if (!tempo.ok) return { ...count, type: "partial", faults, note: tempo.note };
     if (unseen) {
       return { ...count, type: "partial", faults, note: unseen.unseen_cue ?? "Step back so your whole body is in frame" };
     }
@@ -420,6 +457,9 @@ export class WorkoutEngine {
       status: top.hit.status,
       side: top.hit.sides.length === 1 ? top.hit.sides[0] : null,
       fromRep: top.fromRep,
+      measurement: Number.isFinite(top.hit.value)
+        ? { metric: top.hit.rule.metric, value: top.hit.value, op: top.hit.rule.op, warn: top.hit.rule.warn, bad: top.hit.rule.bad }
+        : undefined,
     };
   }
 
@@ -440,7 +480,7 @@ export class WorkoutEngine {
   }
 
   private snapshot(
-    s: Pick<EngineSnapshot, "landmarks" | "angles" | "inFrame" | "setupOk" | "jointStatus"> &
+    s: Pick<EngineSnapshot, "landmarks" | "angles" | "sides" | "inFrame" | "setupOk" | "jointStatus"> &
       Partial<Pick<EngineSnapshot, "repEvent" | "issue" | "coachIssue" | "praise">>,
   ): EngineSnapshot {
     return {
@@ -450,6 +490,7 @@ export class WorkoutEngine {
       praise: false,
       ...s,
       score: this.score,
+      scoreSkip: this.scoreSkip,
       breakdown: { ...this.breakdown },
       averageScore: this.scoreFrames ? this.scoreSum / this.scoreFrames : null,
       reps: this.counter?.reps ?? 0,

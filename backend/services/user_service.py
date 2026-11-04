@@ -123,3 +123,26 @@ async def user_stats(db: AsyncSession, user_id: str) -> UserStats:
         by_exercise=dict(Counter(s.exercise_id for s in sessions)),
         common_issues=[IssueCount(fault_id=f, label=lbl, count=c) for f, lbl, c in issue_rows.all()],
     )
+
+
+async def session_digest(db: AsyncSession, session_id: str) -> dict | None:
+    """Stats of one finished session (reps, score, which faults were coached and how often), for the LLM debrief."""
+    session = await db.get(WorkoutSession, session_id)
+    if session is None:
+        return None
+    rows = await db.execute(
+        select(CoachingCue.label, func.count())
+        .where(CoachingCue.session_id == session_id)
+        .group_by(CoachingCue.label)
+        .order_by(func.count().desc())
+        .limit(3)
+    )
+    return {
+        "user_id": session.user_id,
+        "exercise_id": session.exercise_id,
+        "reps": session.reps,
+        "rep_target": session.rep_target,
+        "partial_reps": session.partial_reps,
+        "avg_score": session.avg_score,
+        "faults": [(label, n) for label, n in rows],
+    }

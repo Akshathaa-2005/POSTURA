@@ -4,7 +4,8 @@ Postura is a browser-based form coach. The camera and pose detection run in the 
 leaves the device. A FastAPI backend phrases spoken cues, speaks them, and stores sessions. A separate
 offline script generates the exercise guide photos.
 
-Status as of 10 October 2026. See [README.md](README.md) for how to run it.
+Status as of 4 November 2026. See [README.md](README.md) for how to run it and [docs/TECH_STACK.md](docs/TECH_STACK.md) for a
+full walkthrough of the computer-vision and LLM parts.
 
 ## 1. System overview
 
@@ -25,7 +26,15 @@ Status as of 10 October 2026. See [README.md](README.md) for how to run it.
               │                                                                 │
  useWebSocket ── sends only detected faults, rep events and session totals ─────┘
 
- Offline (not part of a workout):
+ Plan generator (separate flow, /plan page):
+   free text ─► POST /api/plans/generate ─► plans/service.py
+        extract profile (LLM) → safety screen (code) → targets (code) → workout (LLM) → meals (LLM) → validated plan
+
+Avatar coach (in the workout view):
+   landmarks ─► kinematicSolver (anatomical limits) ─► logical rig ─► glbRetarget ─► Blender .glb character
+   backend `correction` messages carry a sanitised avatar command that makes the avatar demonstrate the fix
+
+Offline (not part of a workout):
    scripts/generate_pose_guides.py ─► Stable Diffusion + ControlNet OpenPose ─► MediaPipe check ─► frontend/public/guides/
 ```
 
@@ -56,15 +65,23 @@ The browser sends the backend only the faults it found, never video or raw landm
 | `exercises/ml_spec.json` | Skeleton spec for the form model (joints, window length, normalisation). Read by both the trainer and the browser. |
 | `backend/ml/` | Form-model pipeline: `skeleton.py`, `model.py`, `dataset.py`, `train.py`, `export_onnx.py`, `evaluate.py`, `synthetic.py` (smoke tests only). |
 | `frontend/src/ml/` | `skeleton.ts` (normalisation), `recorder.ts` (per-rep windows), `formModel.ts` (browser inference), `recordingStore.ts` (IndexedDB labels). |
+| `frontend/src/pose/` | Pose robustness layer: One-Euro smoother, gap filler, tempo constraints, YOLO11-pose detector and COCO adapter (dev-only). See `pose/README.md`. |
+| `frontend/src/utils/kinematicSolver.ts`, `avatarRig.ts`, `glbRetarget.ts`, `components/AvatarCoach3D.tsx` | 3D avatar: landmarks to bone rotations (with joint limits), the logical rig, retargeting onto the `.glb`, grounding. |
+| `frontend/public/models/` | Avatar `.glb` / `.blend` files and the YOLO ONNX model. Credits in `docs/AVATAR_CREDITS.md`. |
+| `backend/plans/` | AI plan generator: `service.py` (pipeline), `llm_service.py` (Ollama calls with validation-driven retries), `safety.py`, `nutrition.py`, `prompts.py`, `router.py`. |
+| `backend/schemas/avatar.py` | Avatar correction commands and `KinematicClamper`, which sanitises them. |
+| `frontend/src/features/plan/`, `pages/plan/` | Plan form, plan view and client-side validation. |
 | `frontend/src/components/RecordPanel.tsx`, `FormModelCard.tsx` | Record-mode labelling and the "AI form check" card. |
 
 ## 3. Frontend
 
 **Stack:** Next.js 15.5, React 18.3, TypeScript, Tailwind, Framer Motion 11, Zustand 4.5, MediaPipe Tasks Vision 0.10.35,
-Vitest 3.2.7.
+onnxruntime-web 1.30, Three.js 0.186, Vitest 3.2.7.
 
 **Per-frame pipeline** (`WorkoutEngine.process`):
-1. Smooth landmarks and angles with an exponential moving average (`LANDMARK_SMOOTHING`, `METRIC_SMOOTHING`).
+1. Clean the landmarks (`pose/occlusion.ts`, `utils/landmarkReliability.ts`): One-Euro smoothing per landmark, drop
+   unseen / crossed / over-stretched joints, and fill a briefly hidden joint for up to 300 ms. Metrics are then
+   smoothed with an exponential moving average (`METRIC_SMOOTHING`).
 2. Pick the judged side. Front-view exercises use both sides. Side-view exercises use the side closer to the camera,
    because MediaPipe mostly guesses the far limbs.
 3. Check the setup gate (for example, a push-up must be in a plank). Nothing counts until it passes.
@@ -83,7 +100,7 @@ thresholds. `npm test` checks that the thresholds are ordered correctly for ever
 **Exercise types:** `mode: "reps"` (default) counts repetitions. `mode: "hold"` times a position (plank, wall sit,
 side plank) and pauses the clock on a major fault.
 
-**Testing:** 145 Vitest tests. They run the engine on synthetic poses with exact joint angles. They check every
+**Testing:** 297 Vitest tests (5 skipped, run on 4 November 2026). They run the engine on synthetic poses with exact joint angles. They check every
 exercise's configuration, each fault's behaviour, rep acceptance, holds, and that `figure_poses.json` matches the TypeScript source.
 
 ## 4. Backend
@@ -113,8 +130,9 @@ fault and rotates them. If Ollama is down or times out after 25 s, the authored 
 (one row for every cue delivered). `GET /api/users/{id}/stats` returns totals, separating hold seconds from reps,
 and the most common faults.
 
-**Tests:** 24 pytest tests cover the WebSocket protocol, session saving, pacing, the LLM prompt and cleanup, the guide
-geometry, and the error handler.
+**Tests:** 56 pytest tests (excluding the ML ones, which need `requirements-ml.txt`) cover the WebSocket protocol, session
+saving, pacing, the LLM prompt and cleanup, the avatar commands, the plan generator, the guide geometry, and the error
+handler. Two API tests that use SQLite occasionally fail with "database is locked"; it varies from run to run.
 
 ## 5. Models and technologies
 
@@ -125,18 +143,20 @@ was considered and not used. **Optional** means it is supported but not on by de
 
 | Model / tool | Status | Where | Notes |
 |---|---|---|---|
-| MediaPipe Pose Landmarker **lite** (float16) | In use | Browser, WASM, GPU with CPU fallback | 33 landmarks, runs at full frame rate. Self-hosted in `public/mediapipe`, with a CDN fallback. |
+| MediaPipe Pose Landmarker **full** (float16, default) | In use | Browser, WASM, GPU with CPU fallback | 33 landmarks, runs at full frame rate. Holds up better under occlusion than lite. Choose `lite` / `full` / `heavy` with `NEXT_PUBLIC_POSE_MODEL_VARIANT`. Self-hosted in `public/mediapipe`, with a CDN fallback. |
+| One-Euro filter, reliability gate, gap filler (`src/pose/`) | In use | Browser | Removes jitter, drops untrustworthy joints, bridges occlusions of up to 300 ms. |
 | MediaPipe Pose Landmarker **heavy** | In use (offline) | `generate_pose_guides.py` | Checks each generated guide photo. Too slow for live use, which is why the browser uses lite. |
 | MediaPipe Python 0.10.35 | In use (offline) | Backend guide generator | Pinned to the same version as the browser. |
 | Rule-based fault evaluation (joint angles and metrics) | In use | Browser | Hand-set thresholds in `exercises.json`. This is what decides rep counts today, and it is not accurate enough yet. |
-| YOLOv8 Pose / YOLO11 Pose (Ultralytics) | Rejected | | Considered for accuracy. Not tested. Tracks 17 keypoints with no feet, which matters for squats and lunges. Would need the frames sent to a server. |
+| YOLO11s-pose (Ultralytics, ONNX) | Optional (dev-only) | Browser, onnxruntime-web (WebGPU, WASM fallback) | Runs in the browser, so no frames leave the device. Not used by the workout flow. Reachable at `/dev/pose-compare` to compare against MediaPipe. It tracks 17 keypoints with no feet, which matters for squats and lunges. |
 | **ST-GCN + self-attention rep-form classifier** (own model, 147k parameters) | **Built, not trained on real data** | Browser (`onnxruntime-web`, WebAssembly) | Pipeline, export and browser inference all work and are tested. It has only been trained on synthetic reps, so it is not shipped and has no accuracy figure for real users. See section 6. |
 
 ### Language models
 
 | Model / tool | Status | Where | Notes |
 |---|---|---|---|
-| Ollama + Mistral 7B | Optional | Backend `correction_generator` | Rephrases authored cues. Off by default; the server falls back to the authored cue when it is absent. |
+| Ollama + Mistral 7B | Optional | Backend `correction_generator` | Rephrases authored cues. The server falls back to the authored cue when it is absent. |
+| Ollama + Mistral 7B (or `PLAN_MODEL`) | Optional | Backend `plans/` | Extracts a profile from free text, then writes the workout week and example meal days as JSON. Every output is validated and retried; safety screening and calorie / macro targets are done in code. Returns 503 when Ollama is unavailable. |
 | Vision LLMs (GPT-4V, Claude Vision) for live scoring | Rejected | | Discussed. One to two seconds per frame, costs money, and would send video off the device. Could be used for post-workout review. |
 
 ### Speech
@@ -253,6 +273,9 @@ plenty of good reps. Until there is a model in `frontend/public/models/form/`, t
 ## 7. Known gaps
 
 - **The form model has no real training data**, so it is not used. Collecting labelled reps is the next step.
+- **Plan generation needs Ollama.** Without it, `/api/plans/generate` returns 503; there is no template fallback.
+- **Avatar:** the arms rest tilted 12° outward (`REST_ARM_ABDUCT_DEG`) so the sleeves don't clip into the torso.
+- **Two SQLite API tests are flaky** ("database is locked").
 - **Rep counting is not accurate yet.** The thresholds are estimates. They need real recordings to tune. The debug
   log in `workoutEngine.ts` prints each rep's measurements to the console to support this.
 - **Guide photos:** two frames need replacing (the push-up finish and the push-up start skeleton placement). Some
@@ -265,10 +288,15 @@ plenty of good reps. Until there is a model in `frontend/public/models/form/`, t
 ## 8. Decisions and why
 
 - **Pose detection in the browser:** privacy (video never leaves the device) and no server cost. The trade-off is
-  a smaller model, MediaPipe lite, than a server could run.
+  a smaller model than a server could run (MediaPipe full by default).
 - **Faults decided in the browser:** the browser has full frame rate and the smoothed landmarks, so it can judge
   faults and reps accurately. The backend only receives events.
 - **Authored cues as the source of truth:** a language model should never decide what is wrong, only how
   to say it. Keeping the cues in `exercises.json` also makes them reviewable.
 - **Guide photos generated offline:** generating an image takes minutes, so it can't run during a workout.
+- **Plans: LLM writes text, code owns numbers and safety.** Calories and macros are computed (`nutrition.py`), medical
+  and unsafe-goal screening is regex-based and runs before and after the model, and the model's JSON is validated and
+  retried with the error fed back. User text is fenced and declared to be data.
+- **Avatar commands are looked up, not generated.** The LLM only phrases speech; the avatar's movement comes from a
+  canonical correction table passed through `KinematicClamper`, so the avatar can't be told to do something impossible.
 - **Single `exercises.json`:** the browser and the server must agree on fault IDs and thresholds.

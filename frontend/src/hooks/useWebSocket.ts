@@ -12,6 +12,7 @@ function handleMessage(msg: ServerMessage) {
       break;
     case "correction":
       setCoach({
+        avatarCommand: msg.avatar_command ?? null,
         correction: {
           id: msg.id,
           faultId: msg.fault_id,
@@ -20,6 +21,7 @@ function handleMessage(msg: ServerMessage) {
           text: msg.text,
           source: msg.source,
           at: Date.now(),
+          avatarCommand: msg.avatar_command ?? null,
         },
       });
       break;
@@ -81,12 +83,17 @@ export function useWebSocket({ exerciseId, active, sessionKey }: { exerciseId: s
   // The browser detects faults at full frame rate; the server phrases them (LLM), speaks them (TTS),
   // paces them so the coach doesn't nag, and logs them.
   const sendIssue = useCallback((issue: FormIssue) => {
+    // The ST-GCN's read of the last rep (if loaded) is a second opinion on rep-level faults.
+    const read = useWorkoutState.getState().modelRead;
+    const prob = issue.fromRep && read ? read.probs[issue.id] : undefined;
     socketRef.current?.send({
       type: "issue",
       fault_id: issue.id,
       status: issue.status,
       side: issue.side,
       from_rep: issue.fromRep,
+      measurement: issue.measurement,
+      model_prob: prob,
     });
   }, []);
 

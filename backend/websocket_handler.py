@@ -7,7 +7,8 @@ the authored cue), speaks them (TTS), paces them so the coach doesn't nag, and p
 Protocol (JSON messages):
   client → server
     {"type": "start", "exercise_id"}                                   begin a workout session
-    {"type": "issue", "fault_id", "status": "warn"|"bad", "side", "from_rep"}
+    {"type": "issue", "fault_id", "status": "warn"|"bad", "side", "from_rep",
+     "measurement": {"metric", "value", "op", "warn", "bad"}?, "model_prob"?}
     {"type": "praise"}                                                  a run of clean reps
     {"type": "rep", "event": "rep"|"partial", "reps", "rom"}
     {"type": "end", "reps", "avg_score", "duration_sec"}               finish and persist
@@ -33,7 +34,12 @@ from config import get_settings
 from database import SessionLocal
 from models import EndMessage, IssueMessage, PraiseMessage, RepMessage, StartMessage
 from services import user_service
-from services.correction_generator import encouragement, generate_correction, ollama_available
+from services.correction_generator import (
+    encouragement,
+    generate_avatar_command,
+    generate_correction,
+    ollama_available,
+)
 from services.exercises import fault_cue, get_exercise, get_fault
 from services.tts_service import text_to_speech, tts_available
 
@@ -189,8 +195,10 @@ class CoachSession:
         try:
             cue = fault_cue(self.exercise, fault, msg.side)
             text, source = await generate_correction(
-                self.exercise, fault["id"], fault["label"], cue, msg.status, msg.side, msg.from_rep
+                self.exercise, fault["id"], fault["label"], cue, msg.status, msg.side, msg.from_rep,
+                msg.measurement, msg.model_prob,
             )
+            avatar_cmd = generate_avatar_command(self.exercise, fault["id"], text, msg.side)
             await self.send(
                 {
                     "type": "correction",
@@ -200,6 +208,7 @@ class CoachSession:
                     "status": msg.status,
                     "text": text,
                     "source": source,
+                    "avatar_command": avatar_cmd.model_dump() if avatar_cmd else None,
                 }
             )
             if session_id:

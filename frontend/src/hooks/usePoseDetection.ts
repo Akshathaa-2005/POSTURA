@@ -2,13 +2,29 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import type { DetectionStatus } from "@/types";
 import type { Landmark } from "@/types/mediapipe";
+import { cocoToLandmarks } from "@/pose/cocoAdapter";
+import type { YoloPoseDetector } from "@/pose/yoloPose";
 
 const WASM_PATH = "/mediapipe/wasm";
-const MODEL_URL = process.env.NEXT_PUBLIC_POSE_MODEL_URL || "/mediapipe/models/pose_landmarker_lite.task";
+// lite | full | heavy. "full" holds up much better than "lite" when limbs are partly hidden; "heavy" is for fast GPUs.
+const VARIANT = process.env.NEXT_PUBLIC_POSE_MODEL_VARIANT || "full";
+const MODEL_URL = process.env.NEXT_PUBLIC_POSE_MODEL_URL || `/mediapipe/models/pose_landmarker_${VARIANT}.task`;
 // Used only if the self-hosted files are missing (e.g. `npm run setup:mediapipe` never ran).
 const CDN_WASM_PATH = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
-const CDN_MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+const CDN_MODEL_URL = `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${VARIANT}/float16/1/pose_landmarker_${VARIANT}.task`;
+
+/**
+ * Which pose model drives the app: "mediapipe" (default) or "yolo" (experimental YOLO11-pose via onnxruntime-web;
+ * needs public/models/yolo/yolo11s-pose.onnx). Set NEXT_PUBLIC_POSE_BACKEND, or add `?pose=yolo` to the URL to
+ * try it for one session.
+ */
+export type PoseBackend = "mediapipe" | "yolo";
+
+function chooseBackend(): PoseBackend {
+  const fromUrl = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("pose") : null;
+  const wanted = fromUrl || process.env.NEXT_PUBLIC_POSE_BACKEND;
+  return wanted === "yolo" ? "yolo" : "mediapipe";
+}
 
 export interface FrameInfo {
   width: number;
@@ -22,7 +38,7 @@ export type PoseResultsHandler = (landmarks: Landmark[] | null, info: FrameInfo)
 // The landmarker is expensive to create (WASM + model), so share one across workouts.
 let landmarkerPromise: Promise<PoseLandmarker> | null = null;
 
-function getLandmarker(): Promise<PoseLandmarker> {
+export function getLandmarker(): Promise<PoseLandmarker> {
   landmarkerPromise ??= (async () => {
     const { FilesetResolver, PoseLandmarker } = await import("@mediapipe/tasks-vision");
     const selfHosted = await fetch(MODEL_URL, { method: "HEAD" }).then((r) => r.ok, () => false);
@@ -49,6 +65,34 @@ function getLandmarker(): Promise<PoseLandmarker> {
     throw err;
   });
   return landmarkerPromise;
+}
+
+let yoloPromise: Promise<YoloPoseDetector> | null = null;
+
+function getYolo(): Promise<YoloPoseDetector> {
+  yoloPromise ??= import("@/pose/yoloPose")
+    .then(({ YoloPoseDetector }) => YoloPoseDetector.create())
+    .catch((err) => {
+      yoloPromise = null; // allow retry
+      throw err;
+    });
+  return yoloPromise;
+}
+
+/** One frame in, 33 MediaPipe-layout landmarks (or null) out, whichever model is running. */
+type Detect = (video: HTMLVideoElement, now: number) => Landmark[] | null | Promise<Landmark[] | null>;
+
+async function createDetector(backend: PoseBackend): Promise<Detect> {
+  if (backend === "yolo") {
+    const yolo = await getYolo();
+    console.info(`[pose] YOLO11-pose on ${yolo.provider}`);
+    return async (video) => {
+      const det = await yolo.detect(video);
+      return det ? cocoToLandmarks(det.keypoints, { aspect: video.videoWidth / video.videoHeight }) : null;
+    };
+  }
+  const landmarker = await getLandmarker();
+  return (video, now) => landmarker.detectForVideo(video, now).landmarks[0] ?? null;
 }
 
 function describeError(err: unknown): string {
@@ -89,6 +133,7 @@ export function usePoseDetection(
       return;
     }
 
+    const backend = chooseBackend();
     let cancelled = false;
     let raf = 0;
     let stream: MediaStream | null = null;
@@ -112,38 +157,45 @@ export function usePoseDetection(
         await video.play();
 
         setStatus("loading-model");
-        const landmarker = await getLandmarker();
+        const detect = await createDetector(backend);
         if (cancelled) return;
         setStatus(pausedRef.current ? "paused" : "running");
 
         let lastVideoTime = -1;
         let lastFrameAt = performance.now();
         let fps = 0;
+        // The YOLO path is async; while a frame is in flight newer frames are skipped rather than queued.
+        let busy = false;
 
         const loop = () => {
           if (cancelled) return;
           raf = requestAnimationFrame(loop);
-          if (pausedRef.current || video.readyState < 2 || video.currentTime === lastVideoTime) return;
+          if (busy || pausedRef.current || video.readyState < 2 || video.currentTime === lastVideoTime) return;
           lastVideoTime = video.currentTime;
 
-          const now = performance.now();
+          const emit = (landmarks: Landmark[] | null) => {
+            const now = performance.now();
+            fps = fps ? fps * 0.9 + (1000 / Math.max(1, now - lastFrameAt)) * 0.1 : 30;
+            lastFrameAt = now;
+            onResultsRef.current(landmarks, { width: video.videoWidth, height: video.videoHeight, now, fps });
+          };
+
           let result;
           try {
-            result = landmarker.detectForVideo(video, now);
+            result = detect(video, performance.now());
           } catch (err) {
             // A single bad frame (e.g. during a resolution change) shouldn't end the workout.
             console.warn("Pose detection skipped a frame", err);
             return;
           }
-          fps = fps ? fps * 0.9 + (1000 / Math.max(1, now - lastFrameAt)) * 0.1 : 30;
-          lastFrameAt = now;
-
-          onResultsRef.current(result.landmarks[0] ?? null, {
-            width: video.videoWidth,
-            height: video.videoHeight,
-            now,
-            fps,
-          });
+          if (!(result instanceof Promise)) return emit(result);
+          busy = true;
+          result
+            .then((landmarks) => {
+              if (!cancelled && !pausedRef.current) emit(landmarks);
+            })
+            .catch((err) => console.warn("Pose detection skipped a frame", err))
+            .finally(() => (busy = false));
         };
         loop();
       } catch (err) {
