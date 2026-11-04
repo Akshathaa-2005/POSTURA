@@ -1,7 +1,8 @@
-"""Structured-JSON calls to the local Ollama server, with validation-driven retries.
+"""Structured-JSON calls to a free hosted LLM API (OpenAI-compatible chat endpoint), with validation-driven retries.
 
-Only Ollama is used (no hosted APIs). Failures are split in two so the API can answer correctly:
-LLMUnavailable (server down / model missing / timeout → 503) and LLMBadOutput (model kept returning
+Default provider is Groq's free tier; any OpenAI-compatible endpoint works via PLAN_API_URL / PLAN_MODEL.
+Failures are split in two so the API can answer correctly:
+LLMUnavailable (no key / network / rate limit / timeout → 503) and LLMBadOutput (model kept returning
 unusable JSON → 502).
 """
 
@@ -21,8 +22,8 @@ from .prompts import RETRY
 log = logging.getLogger(__name__)
 T = TypeVar("T")
 
-# A local model serves one generation at a time; queue instead of timing everyone out.
-_gate = asyncio.Semaphore(1)
+# Free tiers reset per minute; wait and retry a rate-limited call instead of failing the whole plan.
+RATE_LIMIT_WAITS_SEC = (15, 30)
 
 
 class LLMError(Exception):
@@ -38,34 +39,51 @@ class LLMBadOutput(LLMError):
 
 
 def model_name() -> str:
-    s = get_settings()
-    return s.plan_model or s.ollama_model
+    return get_settings().plan_model
 
 
 async def _chat(messages: list[dict[str, str]], schema: dict | None, max_tokens: int) -> str:
     s = get_settings()
+    if not s.plan_api_key:
+        raise LLMUnavailable("No plan API key is set. Add PLAN_API_KEY to backend/.env (free key at console.groq.com).")
+    if schema:
+        # JSON mode guarantees valid JSON, not the shape; spell the shape out and let the parser enforce it.
+        messages = [{"role": "system", "content": f"Respond with JSON matching this JSON Schema:\n{json.dumps(schema)}"}, *messages]
     body = {
         "model": model_name(),
         "messages": messages,
-        "stream": False,
-        "format": schema or "json",
-        "options": {"temperature": 0.3, "num_predict": max_tokens, "num_ctx": 6144},
+        "response_format": {"type": "json_object"},
+        # Reasoning models otherwise spend the whole token budget thinking and return no JSON.
+        "reasoning_effort": "low",
+        "temperature": 0.3,
+        "max_tokens": max_tokens,
     }
+    headers = {"Authorization": f"Bearer {s.plan_api_key}"}
     try:
-        async with _gate, httpx.AsyncClient(timeout=s.plan_llm_timeout_sec) as client:
-            r = await client.post(f"{s.ollama_api_url}/api/chat", json=body)
+        async with httpx.AsyncClient(timeout=s.plan_llm_timeout_sec) as client:
+            for wait in (*RATE_LIMIT_WAITS_SEC, None):
+                r = await client.post(f"{s.plan_api_url.rstrip('/')}/chat/completions", json=body, headers=headers)
+                if r.status_code != 429 or wait is None:
+                    break
+                log.info("plan API rate limited; waiting %ss before retrying", wait)
+                await asyncio.sleep(wait)
             r.raise_for_status()
-            return r.json()["message"]["content"]
+            return r.json()["choices"][0]["message"]["content"]
     except httpx.TimeoutException as exc:
-        raise LLMUnavailable("The local model took too long to answer. Try again, or use a smaller model.") from exc
+        raise LLMUnavailable("The AI service took too long to answer. Try again.") from exc
     except httpx.HTTPStatusError as exc:
-        if exc.response.status_code == 404:
-            raise LLMUnavailable(f"Model '{model_name()}' is not installed in Ollama (run: ollama pull {model_name()}).") from exc
-        raise LLMUnavailable(f"Ollama returned HTTP {exc.response.status_code}.") from exc
+        code = exc.response.status_code
+        if code in (401, 403):
+            raise LLMUnavailable("The plan API key was rejected. Check PLAN_API_KEY in backend/.env.") from exc
+        if code == 429:
+            raise LLMUnavailable("The free AI service rate limit was hit. Wait a minute and try again.") from exc
+        if code == 404:
+            raise LLMUnavailable(f"Model '{model_name()}' was not found at the plan API. Check PLAN_MODEL.") from exc
+        raise LLMUnavailable(f"The plan API returned HTTP {code}.") from exc
     except httpx.HTTPError as exc:
-        raise LLMUnavailable("Can't reach the local Ollama server. Is it running?") from exc
-    except (KeyError, ValueError) as exc:
-        raise LLMBadOutput("Ollama sent an unexpected response.") from exc
+        raise LLMUnavailable("Can't reach the plan API. Check the network connection.") from exc
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise LLMBadOutput("The plan API sent an unexpected response.") from exc
 
 
 async def generate(

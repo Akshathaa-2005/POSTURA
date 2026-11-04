@@ -32,11 +32,23 @@ module.exports = {
         "fade-up": { from: { opacity: "0", transform: "translateY(18px)" }, to: { opacity: "1", transform: "none" } },
         "fade-in": { from: { opacity: "0", transform: "scale(0.96)" }, to: { opacity: "1", transform: "none" } },
         wave: { "0%, 100%": { transform: "scaleY(0.25)" }, "50%": { transform: "scaleY(1)" } },
+        "drift-a": {
+          "0%": { transform: "translate3d(0,0,0) scale(1)" },
+          "50%": { transform: "translate3d(6vw,4vh,0) scale(1.08)" },
+          "100%": { transform: "translate3d(-3vw,6vh,0) scale(0.96)" },
+        },
+        "drift-b": {
+          "0%": { transform: "translate3d(0,0,0) scale(1)" },
+          "50%": { transform: "translate3d(-5vw,-3vh,0) scale(0.94)" },
+          "100%": { transform: "translate3d(4vw,-6vh,0) scale(1.06)" },
+        },
       },
       animation: {
         "fade-up": "fade-up 0.7s cubic-bezier(0.22,1,0.36,1) both",
         "fade-in": "fade-in 0.6s ease-out both",
         wave: "wave 0.9s ease-in-out infinite",
+        "drift-a": "drift-a 26s ease-in-out infinite alternate",
+        "drift-b": "drift-b 32s ease-in-out infinite alternate",
       },
       boxShadow: {
         soft: "0 1px 2px rgba(59,63,73,0.04), 0 12px 32px -12px rgba(59,63,73,0.12)",

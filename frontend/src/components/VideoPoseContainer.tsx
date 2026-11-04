@@ -1,4 +1,3 @@
-import { useFormModel } from "@/hooks/useFormModel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Exercise, FormIssue, RepEvent } from "@/types";
@@ -7,6 +6,7 @@ import { usePoseDetection, type PoseResultsHandler } from "@/hooks/usePoseDetect
 import { useWorkoutState } from "@/hooks/useWorkoutState";
 import { WorkoutEngine } from "@/utils/workoutEngine";
 import { PoseGuideFrames } from "./PoseGuide";
+import FramingCard from "./FramingCard";
 import PoseSkeleton, { type SkeletonFrame } from "./PoseSkeleton";
 
 interface Props {
@@ -52,9 +52,6 @@ export default function VideoPoseContainer({
   const [dims, setDims] = useState({ width: 0, height: 0 });
   const frameRef = useRef<SkeletonFrame>({ landmarks: null, jointStatus: new Map(), angles: {}, updatedAt: 0 });
 
-  const formModel = useFormModel();
-  const modelRef = useRef(formModel);
-  modelRef.current = formModel;
   const engine = useMemo(() => new WorkoutEngine(exercise), [exercise, sessionKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const lastPush = useRef(0);
   const lastFrameAt = useRef<number | null>(null);
@@ -65,6 +62,9 @@ export default function VideoPoseContainer({
   const personVisible = useWorkoutState((s) => s.personVisible);
   const inFrame = useWorkoutState((s) => s.inFrame);
   const lastEvent = useWorkoutState((s) => s.lastEvent);
+  const reps = useWorkoutState((s) => s.reps);
+  const repTarget = useWorkoutState((s) => s.repTarget);
+  const setComplete = exercise.mode !== "hold" && repTarget > 0 && reps >= repTarget;
 
   const onResults = useCallback<PoseResultsHandler>(
     (landmarks, { width, height, now, fps }) => {
@@ -86,12 +86,6 @@ export default function VideoPoseContainer({
       if (snap.repEvent) {
         pendingEvent.current = snap.repEvent;
         const ev = snap.repEvent;
-        if (ev.window && modelRef.current) {
-          modelRef.current
-            .read(exercise.id, ev.window)
-            .then((read) => read && useWorkoutState.getState().setModelRead({ ...read, at: ev.at, repType: ev.type }))
-            .catch((err) => console.warn("[form model] scoring failed", err));
-        }
         callbacks.current.onRepEvent?.(snap.repEvent, snap.reps);
       }
       if (snap.coachIssue) callbacks.current.onCoachIssue?.(snap.coachIssue);
@@ -128,7 +122,7 @@ export default function VideoPoseContainer({
     if (!lastEvent) return;
     const id = setTimeout(() => {
       if (useWorkoutState.getState().lastEvent === lastEvent) useWorkoutState.setState({ lastEvent: null });
-    }, 1000);
+    }, 1600);
     return () => clearTimeout(id);
   }, [lastEvent]);
 
@@ -193,12 +187,21 @@ export default function VideoPoseContainer({
           </Overlay>
         )}
 
-        {status === "running" && (!personVisible || !inFrame) && (
-          <div className="absolute inset-x-0 top-4 flex justify-center px-4">
-            <div className="rounded-full bg-linen/90 px-5 py-2 text-sm text-ink shadow-soft backdrop-blur">
-              {personVisible ? `Adjust position: ${exercise.camera_setup.toLowerCase()}` : "Step into the frame"}
+        {status === "running" && !setComplete && <FramingCard exercise={exercise} />}
+        {status === "running" && setComplete && (
+          <motion.div
+            role="status"
+            initial={{ opacity: 0, y: -12, scale: 0.94 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: "spring", stiffness: 260, damping: 20 }}
+            className="absolute inset-x-0 top-4 flex justify-center px-4"
+          >
+            <div className="relative rounded-2xl bg-done px-6 py-3 text-center text-linen shadow-soft">
+              <span aria-hidden className="absolute -inset-1 -z-10 animate-ping rounded-2xl bg-done/40" />
+              <p className="font-display text-2xl italic">Set complete</p>
+              <p className="mt-0.5 text-xs opacity-90">{reps} of {repTarget} reps done. Rest, then start your next set.</p>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* Rep feedback pop */}
@@ -222,7 +225,7 @@ export default function VideoPoseContainer({
                       lastEvent.faults.length ? "text-warn" : "text-done"
                     }`}
                   >
-                    {lastEvent.faults.length ? lastEvent.faults[0].rule.label : "Good rep"}
+                    {lastEvent.faults.length ? lastEvent.faults[0].rule.label : `Rep ${reps} of ${repTarget} · good form`}
                   </span>
                 </span>
               ) : (

@@ -83,9 +83,6 @@ export function useWebSocket({ exerciseId, active, sessionKey }: { exerciseId: s
   // The browser detects faults at full frame rate; the server phrases them (LLM), speaks them (TTS),
   // paces them so the coach doesn't nag, and logs them.
   const sendIssue = useCallback((issue: FormIssue) => {
-    // The ST-GCN's read of the last rep (if loaded) is a second opinion on rep-level faults.
-    const read = useWorkoutState.getState().modelRead;
-    const prob = issue.fromRep && read ? read.probs[issue.id] : undefined;
     socketRef.current?.send({
       type: "issue",
       fault_id: issue.id,
@@ -93,7 +90,6 @@ export function useWebSocket({ exerciseId, active, sessionKey }: { exerciseId: s
       side: issue.side,
       from_rep: issue.fromRep,
       measurement: issue.measurement,
-      model_prob: prob,
     });
   }, []);
 

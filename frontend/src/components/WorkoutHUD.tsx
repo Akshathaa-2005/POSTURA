@@ -16,32 +16,44 @@ export default function WorkoutHUD({ exercise, cameraOn }: Props) {
   const issue = useWorkoutState((s) => s.issue);
   const coach = useWorkoutState((s) => s.coach);
   const activeMs = useWorkoutState((s) => s.activeMs);
+  const repTarget = useWorkoutState((s) => s.repTarget);
 
   const isHold = exercise.mode === "hold";
   const displayScore = score ?? averageScore;
   const currentCue = coach.correction?.text || issue?.message;
+  const repsDone = !isHold && repTarget > 0 && reps >= repTarget;
 
   return (
     <div className="w-full space-y-3">
       {/* Telemetry Bar (Consolidated metrics pinned to the workout frame) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate/10 overflow-hidden rounded-2xl bg-paper border border-slate/10 shadow-xs">
+      <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate/10 overflow-hidden rounded-[22px] border border-slate/[0.07] bg-linen shadow-soft">
         {/* Metric 1: Reps / Hold Time */}
         <div className="px-4 py-3 text-center">
-          <p className="font-display text-2xl font-medium text-slate">
+          <p className={`font-display text-2xl font-medium ${repsDone ? "text-done" : "text-slate"}`}>
             {isHold ? `${Math.round(holdMs / 1000)}s` : `${reps}`}
             <span className="text-xs font-light text-stone ml-1">
-              / {isHold ? `${exercise.hold_target_sec}s` : exercise.rep_target}
+              / {isHold ? `${exercise.hold_target_sec}s` : repTarget}
             </span>
           </p>
-          <p className="eyebrow mt-0.5 !text-[10px]">{isHold ? "Hold Time" : "Reps Completed"}</p>
+          <p className="eyebrow mt-0.5 !text-[10px]">{isHold ? "Hold Time" : repsDone ? "Set complete" : "Reps Completed"}</p>
+          {!isHold && repTarget > 0 && (
+            <div className="mx-auto mt-2.5 h-1 max-w-[120px] overflow-hidden rounded-full bg-mist" aria-hidden>
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${repsDone ? "bg-done" : "bg-slate"}`}
+                style={{ width: `${Math.min(100, (reps / repTarget) * 100)}%` }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Metric 2: Live Form Score */}
         <div className="px-4 py-3 text-center">
-          <p className="font-display text-2xl font-medium text-slate">
-            {formatPercent(displayScore)}
-          </p>
-          <p className="eyebrow mt-0.5 !text-[10px]">Form Alignment</p>
+          {displayScore === null ? (
+            <p className="font-display text-lg font-medium text-stone">Waiting</p>
+          ) : (
+            <p className="font-display text-2xl font-medium text-slate">{formatPercent(displayScore)}</p>
+          )}
+          <p className="eyebrow mt-0.5 !text-[10px]">{displayScore === null ? "Needs a clear view" : "Form Alignment"}</p>
         </div>
 
         {/* Metric 3: Active Duration */}

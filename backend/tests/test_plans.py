@@ -3,6 +3,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from config import get_settings
 from main import app
 from plans import llm_service
 from plans.nutrition import targets
@@ -181,18 +182,24 @@ def test_vegetarian_diet_enforced(fake_llm):
         assert c.post(f"/api/users/{USER}/plans/generate", json={"profile": FORM}).status_code == 502
 
 
-def test_ollama_down_is_503(fake_llm):
-    fake_llm.replies += [llm_service.LLMUnavailable("Can't reach the local Ollama server. Is it running?")]
+def test_plan_api_down_is_503(fake_llm):
+    fake_llm.replies += [llm_service.LLMUnavailable("Can't reach the plan API. Check the network connection.")]
     with TestClient(app) as c:
         r = c.post(f"/api/users/{USER}/plans/generate", json={"profile": FORM})
     assert r.status_code == 503 and r.json()["code"] == "llm_unavailable"
 
 
-def test_real_unreachable_ollama_maps_to_unavailable():
-    # conftest points OLLAMA_API_URL at a dead port; no fake here
-    with TestClient(app) as c:
-        r = c.post(f"/api/users/{USER}/plans/generate", json={"profile": FORM})
-    assert r.status_code == 503
+def test_real_unreachable_plan_api_maps_to_unavailable(monkeypatch):
+    # a key is set but the API URL is a dead port; no fake here
+    monkeypatch.setenv("PLAN_API_KEY", "test-key")
+    monkeypatch.setenv("PLAN_API_URL", "http://127.0.0.1:9/openai/v1")
+    get_settings.cache_clear()
+    try:
+        with TestClient(app) as c:
+            r = c.post(f"/api/users/{USER}/plans/generate", json={"profile": FORM})
+    finally:
+        get_settings.cache_clear()
+    assert r.status_code == 503 and r.json()["code"] == "llm_unavailable"
 
 
 def test_validation_422_and_bad_user_id():

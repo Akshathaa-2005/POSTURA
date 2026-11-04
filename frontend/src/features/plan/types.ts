@@ -46,7 +46,7 @@ export interface PlanBody {
     notes: string[]; meal_days: { name: string; meals: Meal[] }[];
   };
 }
-export interface StoredPlan { id: string; created_at: string; model: string; plan: PlanBody }
+export interface StoredPlan { id: string; created_at: string; model: string; profile: PlanProfile; plan: PlanBody }
 export interface PlanSummary { id: string; title: string; created_at: string; goal: string | null }
 export interface Safety { blocked: boolean; reasons: string[]; flags: string[] }
 export interface GenerateResponse {

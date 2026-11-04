@@ -42,7 +42,11 @@ export default function PlanPage() {
             {current ? (
               <>
                 <button className="mb-6 text-sm underline" onClick={() => setCurrent(null)}>← New plan</button>
-                <PlanView stored={current} onAdjust={(adjustment) => last && run({ ...last, adjustment })} />
+                <PlanView stored={current} onAdjust={(adjustment) => {
+                  // Saved plans have no form submit in this session, so rebuild the request from the stored profile.
+                  setCurrent(null);
+                  run({ ...(last ?? { profile: current.profile }), adjustment });
+                }} />
               </>
             ) : (
               <>

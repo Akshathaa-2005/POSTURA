@@ -82,6 +82,9 @@ export default function FormScoreMeter() {
           ))}
         </ul>
       </div>
+      {score === null && (
+        <p className="mt-4 text-xs text-stone">Scores appear once your full body is in view and you are in position.</p>
+      )}
     </section>
   );
 }

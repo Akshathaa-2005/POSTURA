@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import type { ModelRead } from "@/ml/formModel";
 import type { AvatarCommand, DetectionStatus, FormIssue, JointAngles, JointStatus, RepEvent, RepPhase, ScoreBreakdown, Side } from "@/types";
 import type { EngineSnapshot } from "@/utils/workoutEngine";
 import type { ConnectionState } from "@/utils/websocket";
@@ -49,6 +48,8 @@ interface WorkoutState {
 
   personVisible: boolean;
   inFrame: boolean;
+  /** Per-landmark visibility (0-1) of the latest frame, after the reliability filter. Empty when no pose. */
+  visibility: number[];
   score: number | null;
   breakdown: ScoreBreakdown;
   averageScore: number | null;
@@ -59,8 +60,6 @@ interface WorkoutState {
   issue: FormIssue | null;
   issueSnapshot: IssueSnapshot | null;
   lastEvent: RepEvent | null;
-  /** The form model's read of the last rep, when a model is installed. */
-  modelRead: (ModelRead & { at: number; repType: RepEvent["type"] }) | null;
   /** Latest smoothed joint angles and the body sides they are judged on (for pose guidance). */
   angles: JointAngles;
   sides: Side[];
@@ -71,7 +70,6 @@ interface WorkoutState {
 
   reset: (exerciseId: string, repTarget: number) => void;
   setStatus: (status: DetectionStatus, error?: string | null) => void;
-  setModelRead: (read: WorkoutState["modelRead"]) => void;
   applySnapshot: (
     s: EngineSnapshot,
     extra: { fps: number; dtMs: number; event: RepEvent | null; aspect: number },
@@ -92,6 +90,7 @@ const initialCoach: CoachState = {
 const initialMetrics = {
   personVisible: false,
   inFrame: false,
+  visibility: [] as number[],
   score: null,
   breakdown: { upper: null, core: null, lower: null, rom: null },
   averageScore: null,
@@ -102,7 +101,6 @@ const initialMetrics = {
   issue: null,
   issueSnapshot: null,
   lastEvent: null,
-  modelRead: null,
   angles: {} as JointAngles,
   sides: [] as Side[],
   fps: 0,
@@ -130,12 +128,12 @@ export const useWorkoutState = create<WorkoutState>((set) => ({
 
   setStatus: (status, error = null) => set({ status, error }),
 
-  setModelRead: (modelRead) => set({ modelRead }),
 
   applySnapshot: (s, { fps, dtMs, event, aspect }) =>
     set((state) => ({
       personVisible: s.landmarks !== null,
       inFrame: s.inFrame,
+      visibility: s.landmarks ? s.landmarks.map((l) => l.visibility ?? 0) : [],
       score: s.score,
       breakdown: s.breakdown,
       averageScore: s.averageScore,

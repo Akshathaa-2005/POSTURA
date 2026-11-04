@@ -18,7 +18,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-up,
-  .animate-fade-in {
+  .animate-fade-in,
+  .animate-drift-a,
+  .animate-drift-b {
     animation: none !important;
   }
 }
@@ -41,4 +43,24 @@
 }
 @media print {
   header, footer.border-t, aside, form { display: none; }
+}
+
+@layer components {
+  /* Form fields: soft inset, forest focus ring, and a custom chevron for selects. */
+  .field {
+    @apply mt-1.5 w-full rounded-xl border border-slate/15 bg-linen px-3.5 py-2.5 text-sm text-ink;
+    @apply placeholder:text-stone/60 shadow-[inset_0_1px_2px_rgba(59,63,73,0.05)] transition;
+    @apply focus:border-forest/50 focus:outline-none focus:ring-4 focus:ring-forest/10;
+  }
+  .field-select {
+    @apply appearance-none pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234A4F5C' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.9rem center;
+    background-size: 14px;
+  }
+  /* Tile counters on the workout and plan screens. */
+  .stat-tile {
+    @apply rounded-2xl border border-slate/[0.07] bg-linen px-4 py-4 shadow-soft;
+  }
 }

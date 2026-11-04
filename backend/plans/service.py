@@ -181,6 +181,16 @@ def _word_hit(pattern: str, text: str) -> str | None:
     return m.group(0) if m else None
 
 
+def _allergen_text(p: Profile) -> str:
+    # Name the foods behind each restriction, so the model doesn't put butter in a lactose-free plan.
+    items = []
+    for term in p.allergies:
+        t = term.lower()
+        foods = [w for key, rx in ALLERGEN_WORDS.items() if re.search(rf"\b{key}s?\b", t) for w in rx.replace("?", "").split("|")]
+        items.append(f"{term} (avoid all of: {', '.join(foods)})" if foods else term)
+    return "; ".join(items) or "none"
+
+
 def _make_meals_parser(p: Profile, cal: int):
     avoid: list[tuple[str, str]] = []  # (user's term, regex)
     for term in p.allergies:
@@ -256,7 +266,7 @@ async def build_plan(p: Profile, adjustment: str | None, safety: SafetyReport) -
     meals = await llm_service.generate(
         prompts.MEALS_SYSTEM.format(
             calories=t["calories"], protein=t["protein_g"], diet=p.diet,
-            allergies=", ".join(p.allergies) or "none", dislikes=", ".join(p.dislikes) or "none",
+            allergies=_allergen_text(p), dislikes=", ".join(p.dislikes) or "none",
         ),
         prompts.MEALS_USER.format(
             goal=p.goal, calories=t["calories"], protein=t["protein_g"], carbs=t["carbs_g"], fat=t["fat_g"], notes=note,

@@ -25,7 +25,6 @@ export type ClientMessage =
       side: Side | null;
       from_rep: boolean;
       measurement?: FaultMeasurement;
-      model_prob?: number;
     }
   | { type: "praise" }
   | { type: "rep"; event: "rep" | "partial"; reps: number; rom: number }

@@ -4,7 +4,6 @@ import { formatDuration, formatPercent } from "@/utils/formatters";
 import AICoachOverlay from "./AICoachOverlay";
 import AvatarCoachCard from "./AvatarCoachCard";
 import CurrentIssueCard from "./CurrentIssueCard";
-import FormModelCard from "./FormModelCard";
 import FormScoreMeter from "./FormScoreMeter";
 import RecordPanel from "./RecordPanel";
 import RepCounter from "./RepCounter";
@@ -44,7 +43,6 @@ export default function DashboardPanel({
         <div className="flex flex-col gap-4">
           <CurrentIssueCard exercise={exercise} mirrored={mirrored} />
           <AICoachOverlay />
-          <FormModelCard exercise={exercise} />
         </div>
 
         {/* Column 3: Coaching Points & Recording */}
@@ -73,7 +71,6 @@ export default function DashboardPanel({
       <RepCounter exercise={exercise} />
       <CurrentIssueCard exercise={exercise} mirrored={mirrored} />
       {showAvatar && <AvatarCoachCard exercise={exercise} />}
-      <FormModelCard exercise={exercise} />
       <AICoachOverlay />
 
       <section className="grid grid-cols-3 divide-x divide-slate/10 overflow-hidden rounded-[22px] bg-sand/60">

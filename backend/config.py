@@ -20,9 +20,12 @@ class Settings(BaseSettings):
     ollama_model: str = "mistral"
     llm_timeout_sec: float = 25.0
 
-    # Plan generation (plans/): local Ollama only; whole plans are far bigger than a spoken cue.
-    plan_model: str = ""  # empty → ollama_model
-    plan_llm_timeout_sec: float = 240.0
+    # Plan generation (plans/): a free hosted API with an OpenAI-compatible chat endpoint.
+    # Default is Groq's free tier (https://console.groq.com/keys); set PLAN_API_KEY in backend/.env.
+    plan_api_url: str = "https://api.groq.com/openai/v1"
+    plan_api_key: str = ""
+    plan_model: str = "openai/gpt-oss-20b"
+    plan_llm_timeout_sec: float = 60.0
     plan_llm_attempts: int = 2  # tries per LLM step; failures feed back into the retry
 
     tts_enabled: bool = True

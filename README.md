@@ -35,7 +35,8 @@ the backend only receives detected faults, rep events and session totals.
 
 | Service | Without it | To enable |
 |---|---|---|
-| Ollama (Mistral 7B) | Template corrections from the exercise database; `/plan` generation returns 503 | `brew install ollama && ollama serve`, then `ollama pull mistral` |
+| Ollama (Mistral 7B) | Template corrections from the exercise database | `brew install ollama && ollama serve`, then `ollama pull mistral` |
+| Plan API key (Groq, free) | `/plan` generation returns 503 | Get a free key at https://console.groq.com/keys, then set `PLAN_API_KEY` in `backend/.env` |
 | PostgreSQL | SQLite file `backend/ai_coach.db` | `docker compose -f backend/docker-compose.yml up -d db`, then set `DATABASE_URL` in `backend/.env` |
 | Backend itself | Frontend still gives full on-device visual feedback | — |
 

@@ -1,6 +1,7 @@
 import Head from "next/head";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import AmbientBackground from "./AmbientBackground";
 
 export default function Layout({ title, children, actions }: { title?: string; children: ReactNode; actions?: ReactNode }) {
   return (
@@ -8,6 +9,7 @@ export default function Layout({ title, children, actions }: { title?: string; c
       <Head>
         <title>{title ? `${title} · Postura` : "Postura · Your real-time form coach"}</title>
       </Head>
+      <AmbientBackground />
       <div className="flex min-h-screen flex-col text-ink">
         <header className="mx-auto flex w-full max-w-[1500px] items-center justify-between px-5 py-6 sm:px-8">
           <Link href="/" className="group flex items-center gap-3" aria-label="Postura home">
