@@ -28,11 +28,12 @@ import {
 } from "./poseValidation";
 import { LandmarkReliability } from "./landmarkReliability";
 import { RepCounter } from "./repCounter";
+import { GapFiller, LandmarkSmoother } from "../pose/occlusion";
+import { checkTempo } from "../pose/repConstraints";
 import { scoreFrame, SCORE_HOLD_MS, visibleFraction, type AssessedRule, type ScoreSkip } from "./formScore";
 import { RepRecorder } from "../ml/recorder";
 
-/** Weight of the newest sample in the exponential moving averages. */
-const LANDMARK_SMOOTHING = 0.6;
+/** Weight of the newest sample in the exponential moving averages (landmarks use a One-Euro filter instead). */
 const METRIC_SMOOTHING = 0.5;
 const SCORE_SMOOTHING = 0.15;
 /** A live fault must persist this long before it's shown or coached (avoids flicker)… */
@@ -101,6 +102,8 @@ export class WorkoutEngine {
 
   private smoothed: Landmark[] | null = null;
   private readonly reliability = new LandmarkReliability();
+  private readonly smoother = new LandmarkSmoother();
+  private readonly gapFiller = new GapFiller();
   private smoothedAngles: JointAngles = {};
   private smoothedMetrics = new Map<string, number>();
   private side: Side = "left";
@@ -152,25 +155,19 @@ export class WorkoutEngine {
       this.smoothed = null;
       this.setupFailSince = null;
       this.reliability.reset();
+      this.smoother.reset();
+      this.gapFiller.reset();
       this.scoreSkip = "no_pose";
       this.expireScore(now);
       return this.snapshot({ landmarks: null, angles: {}, sides: [], inFrame: false, setupOk: true, jointStatus: new Map() });
     }
 
     // 1. Smooth landmarks and angles.
-    this.smoothed = raw.map((p, i) => {
-      const prev = this.smoothed?.[i];
-      return prev
-        ? {
-            x: ema(prev.x, p.x, LANDMARK_SMOOTHING),
-            y: ema(prev.y, p.y, LANDMARK_SMOOTHING),
-            z: ema(prev.z, p.z, LANDMARK_SMOOTHING),
-            visibility: p.visibility,
-          }
-        : p;
-    });
-    // Joints the model can't really see (hidden, crossed, or guessed) are dropped before anything is measured.
-    const lm = this.reliability.sanitize(this.smoothed, width, height, this.exercise.view === "front").landmarks;
+    this.smoothed = this.smoother.smooth(raw, now);
+    // Joints the model can't really see (hidden, crossed, or guessed) are dropped before anything is measured;
+    // ones lost only briefly are carried along with their parent joint so a one-frame dropout doesn't break a rep.
+    const sane = this.reliability.sanitize(this.smoothed, width, height, this.exercise.view === "front");
+    const lm = this.gapFiller.apply(sane.landmarks, sane.unreliable, sane.unseen, now).landmarks;
     const angles = computeJointAngles(lm, width, height);
     for (const [joint, angle] of Object.entries(angles) as [keyof JointAngles, number][]) {
       angles[joint] = this.smoothedAngles[joint] = ema(this.smoothedAngles[joint], angle, METRIC_SMOOTHING);
@@ -356,6 +353,7 @@ export class WorkoutEngine {
     if (process.env.NODE_ENV !== "production") {
       console.info("[rep]", count.type, {
         rom: count.rom,
+        duration_ms: count.duration_ms,
         faults: faults.map((f) => `${f.rule.id}:${f.status}@${Math.round(f.value)}`),
         framesInRep: this.repFrames,
         framesLost: this.repLostFrames,
@@ -366,6 +364,8 @@ export class WorkoutEngine {
 
     if (count.type !== "rep") return { ...count, faults };
     if (faults.some((f) => f.status === "bad")) return { ...count, type: "partial", faults };
+    const tempo = checkTempo(this.exercise.rep!, count.duration_ms);
+    if (!tempo.ok) return { ...count, type: "partial", faults, note: tempo.note };
     if (unseen) {
       return { ...count, type: "partial", faults, note: unseen.unseen_cue ?? "Step back so your whole body is in frame" };
     }
@@ -457,6 +457,9 @@ export class WorkoutEngine {
       status: top.hit.status,
       side: top.hit.sides.length === 1 ? top.hit.sides[0] : null,
       fromRep: top.fromRep,
+      measurement: Number.isFinite(top.hit.value)
+        ? { metric: top.hit.rule.metric, value: top.hit.value, op: top.hit.rule.op, warn: top.hit.rule.warn, bad: top.hit.rule.bad }
+        : undefined,
     };
   }
 

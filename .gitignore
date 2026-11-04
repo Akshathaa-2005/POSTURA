@@ -22,3 +22,5 @@ frontend/next-env.d.ts
 frontend/public/ort/
 backend/ml/data/
 backend/ml/artifacts/
+frontend/public/models/yolo/
+frontend/tsconfig.tsbuildinfo

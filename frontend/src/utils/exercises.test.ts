@@ -3,6 +3,7 @@ import type { MetricName } from "@/types";
 import { EXERCISES } from "./exercises";
 import { FIGURE_POSES } from "./figurePoses";
 import { METRIC_REGION } from "./poseValidation";
+import { tempoConfigProblems } from "../pose/repConstraints";
 import { WorkoutEngine } from "./workoutEngine";
 
 const METRICS = Object.keys(METRIC_REGION) as MetricName[];
@@ -35,6 +36,10 @@ describe("exercise catalog", () => {
       const { direction, start_threshold: start, peak_threshold: peak } = ex.rep;
       expect(METRICS).toContain(ex.rep.metric);
       expect(direction === "decrease" ? peak < start : peak > start).toBe(true);
+    });
+
+    it("has valid tempo limits", () => {
+      if (ex.rep) expect(tempoConfigProblems(ex.rep)).toEqual([]);
     });
 
     it.each(ex.faults.map((f) => [f.id, f] as const))("fault %s is consistent", (_, f) => {

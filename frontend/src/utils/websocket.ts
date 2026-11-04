@@ -1,4 +1,4 @@
-import type { AvatarCommand, JointStatus, Side } from "@/types";
+import type { AvatarCommand, FaultMeasurement, JointStatus, Side } from "@/types";
 
 export type ServerMessage =
   | { type: "session_started"; session_id: string; exercise_id: string; llm: boolean; tts: boolean }
@@ -18,7 +18,15 @@ export type ServerMessage =
 
 export type ClientMessage =
   | { type: "start"; exercise_id: string }
-  | { type: "issue"; fault_id: string; status: "warn" | "bad"; side: Side | null; from_rep: boolean }
+  | {
+      type: "issue";
+      fault_id: string;
+      status: "warn" | "bad";
+      side: Side | null;
+      from_rep: boolean;
+      measurement?: FaultMeasurement;
+      model_prob?: number;
+    }
   | { type: "praise" }
   | { type: "rep"; event: "rep" | "partial"; reps: number; rom: number }
   | { type: "end"; reps: number; avg_score: number | null; duration_sec: number };

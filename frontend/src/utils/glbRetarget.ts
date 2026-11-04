@@ -40,6 +40,10 @@ const GLB_CHILD: Record<string, string> = {
 
 const EXTRA_BONES = ["LeftHand", "RightHand"];
 
+/** `LeftArm` ↔ `RightArm`, for rigs whose left/right is on the other side of the body from the logical rig's. */
+const flipSide = (name: string) =>
+  name.startsWith("Left") ? `Right${name.slice(4)}` : name.startsWith("Right") ? `Left${name.slice(5)}` : name;
+
 /** `mixamorig:Hips`, `mixamorigHips` (GLTFLoader strips the colon) and `Hips` all become `Hips`. */
 export function normalizeBoneName(name: string): string {
   return name.replace(/^mixamorig:?/i, "");
@@ -107,9 +111,19 @@ export function createGlbRetargeter(
   refreshSpace();
   const entries: Entry[] = [];
 
+  // The logical rig puts its "Left" bones on screen-left (-x), but a glTF character faces +Z with its anatomical left on
+  // +x. Copying rotation by name would swing each arm / leg across the body, so pair bones by which side they are on.
+  const sideSign = (o: THREE.Object3D) => Math.sign(posIn(o).x);
+  const crossed = ["LeftArm", "LeftUpLeg"].some((n) => {
+    const p = proxy.get(n);
+    const g = glbBones.get(n);
+    return !!p && !!g && sideSign(p) * sideSign(g) < 0;
+  });
+  const glbName = (name: string) => (crossed ? flipSide(name) : name);
+
   for (const { name } of RIG_BONES) {
     const p = proxy.get(name);
-    const g = glbBones.get(name);
+    const g = glbBones.get(glbName(name));
     if (!p || !g) continue;
 
     const proxyBind = quatIn(p);
@@ -120,7 +134,7 @@ export function createGlbRetargeter(
     if (proxyChild) proxyDir = posIn(proxyChild).sub(posIn(p));
     else if (name.endsWith("ForeArm")) proxyDir = new THREE.Vector3(0, -1, 0).applyQuaternion(proxyBind);
 
-    const glbChild = GLB_CHILD[name] ? glbBones.get(GLB_CHILD[name]) : undefined;
+    const glbChild = GLB_CHILD[name] ? glbBones.get(glbName(GLB_CHILD[name])) : undefined;
     const glbDir = glbChild ? posIn(glbChild).sub(posIn(g)) : null;
 
     const align = new THREE.Quaternion();

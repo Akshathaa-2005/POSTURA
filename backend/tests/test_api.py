@@ -124,3 +124,22 @@ def test_tts_endpoint_reports_unavailable_when_disabled():
     with TestClient(app) as client:  # conftest sets TTS_ENABLED=false
         assert client.get("/api/tts", params={"text": "Bend your knee"}).status_code == 503
         assert client.get("/api/tts", params={"text": ""}).status_code == 422
+
+
+def test_issue_with_measurement_and_session_summary():
+    with TestClient(app) as client:
+        with client.websocket_connect(f"/ws/workout/{USER}") as ws:
+            ws.send_json({"type": "start", "exercise_id": "squat"})
+            session_id = receive_until(ws, "session_started")["session_id"]
+            ws.send_json({
+                "type": "issue", "fault_id": "shallow_squat", "status": "warn", "from_rep": True,
+                "measurement": {"metric": "knee", "value": 120, "op": ">", "warn": 100, "bad": 140},
+                "model_prob": 0.8,
+            })
+            assert receive_until(ws, "correction")["fault_id"] == "shallow_squat"
+            ws.send_json({"type": "end", "reps": 5, "avg_score": 80, "duration_sec": 30})
+            receive_until(ws, "session_saved")
+
+        summary = client.get(f"/api/sessions/{session_id}/summary").json()
+        assert summary["source"] == "template" and "5 reps" in summary["text"]
+        assert client.get("/api/sessions/nope/summary").status_code == 404

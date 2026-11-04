@@ -18,6 +18,7 @@ export class RepCounter {
   private armed = false; // must be seen in the start position before counting
   private maxProgress = 0;
   private reachedPeak = false;
+  private startedAt = 0;
 
   constructor(private readonly config: RepConfig) {}
 
@@ -33,6 +34,7 @@ export class RepCounter {
       const wasMoving = this.phase !== "start";
       const reachedPeak = this.reachedPeak;
       const rom = Math.round(Math.min(1, this.maxProgress) * 100);
+      const duration_ms = now - this.startedAt;
       this.phase = "start";
       this.maxProgress = 0;
       this.reachedPeak = false;
@@ -43,15 +45,16 @@ export class RepCounter {
       }
       if (reachedPeak) {
         // A candidate: the caller decides whether form was good enough and calls commit().
-        return { type: "rep", rom: 100, at: now };
+        return { type: "rep", rom: 100, at: now, duration_ms };
       }
       if (wasMoving && rom >= PARTIAL_THRESHOLD * 100) {
-        return { type: "partial", rom, at: now };
+        return { type: "partial", rom, at: now, duration_ms };
       }
       return null;
     }
 
     if (!this.armed) return null;
+    if (this.phase === "start") this.startedAt = now;
     this.maxProgress = Math.max(this.maxProgress, p);
     if (p >= 1) {
       this.phase = "peak";

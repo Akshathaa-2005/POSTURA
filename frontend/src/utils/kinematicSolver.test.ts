@@ -280,3 +280,58 @@ describe("kinematicSolver", () => {
     expect(qHead!.lengthSq()).toBeCloseTo(1.0, 3);
   });
 });
+
+describe("bicep flex with the arm held out sideways", () => {
+  // Landmarks read off a real frame: upper arm level with the shoulders, forearm up towards the head.
+  const W = 652;
+  const H = 380;
+  const frame = (wristZ: number): Landmark[] => {
+    const lm: Landmark[] = Array.from({ length: 33 }, () => ({ x: 0.5, y: 1.2, z: 0, visibility: 0.1 }));
+    const set = (i: number, px: number, py: number, z = 0) => (lm[i] = { x: px / W, y: py / H, z, visibility: 0.99 });
+    set(LM.NOSE, 322, 167);
+    set(LM.LEFT_EAR, 290, 170);
+    set(LM.RIGHT_EAR, 360, 170);
+    set(LM.RIGHT_SHOULDER, 247, 277);
+    set(LM.LEFT_SHOULDER, 404, 247);
+    set(LM.LEFT_ELBOW, 552, 243);
+    set(LM.LEFT_WRIST, 480, 150, wristZ);
+    set(LM.LEFT_HIP, 360, 420);
+    set(LM.RIGHT_HIP, 270, 430);
+    return lm;
+  };
+  const world = (pose: NonNullable<ReturnType<typeof solveLandmarksToAvatar>>, ...names: string[]) =>
+    names.reduce((q, n) => q.multiply(pose.boneQuaternions.get(n) ?? new THREE.Quaternion()), new THREE.Quaternion());
+  const down = new THREE.Vector3(0, -1, 0);
+
+  it.each([-0.2, -0.1, 0, 0.1, 0.2])("keeps the hand beside the head when the wrist depth reads %f", (wristZ) => {
+    const pose = solveLandmarksToAvatar(frame(wristZ), true, { aspect: W / H })!;
+    const torso = ["Hips", "Spine", "Spine1"];
+    const upper = down.clone().applyQuaternion(world(pose, ...torso, "LeftArm"));
+    const fore = down.clone().applyQuaternion(world(pose, ...torso, "LeftArm", "LeftForeArm"));
+    expect(upper.x).toBeLessThan(-0.9); // out to the avatar's left, level with the shoulder
+    expect(Math.abs(upper.y)).toBeLessThan(0.3);
+    expect(fore.y).toBeGreaterThan(0.5); // forearm points up
+    expect(Math.abs(fore.z)).toBeLessThan(0.35); // …not forward into the face
+  });
+
+  it("puts the arm on the same screen side as the video in both views, using the matching body side", () => {
+    // The user's LEFT arm is out, on the image-right of the raw frame.
+    const mirrored = solveLandmarksToAvatar(frame(0), true, { aspect: W / H })!;
+    const raw = solveLandmarksToAvatar(frame(0), false, { aspect: W / H })!;
+    const torso = ["Hips", "Spine", "Spine1"];
+    const outDir = (pose: typeof mirrored, bone: string) => down.clone().applyQuaternion(world(pose, ...torso, bone));
+    // Mirrored video shows that arm on screen-left → the rig's screen-left ("Left") bone.
+    expect(outDir(mirrored, "LeftArm").x).toBeLessThan(-0.9);
+    // Raw video shows it on screen-right → the rig's screen-right ("Right") bone, pointing right.
+    expect(outDir(raw, "RightArm").x).toBeGreaterThan(0.9);
+    // and the other bone stays down in both
+    expect(outDir(mirrored, "RightArm").y).toBeLessThan(-0.9);
+    expect(outDir(raw, "LeftArm").y).toBeLessThan(-0.9);
+  });
+
+  it("faces the avatar forward (no 180° heading flip) in both views", () => {
+    for (const m of [true, false]) {
+      expect(Math.abs(solveLandmarksToAvatar(frame(0), m, { aspect: W / H })!.headingRad)).toBeLessThan(0.3);
+    }
+  });
+});

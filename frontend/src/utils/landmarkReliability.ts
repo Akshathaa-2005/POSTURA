@@ -45,6 +45,12 @@ export interface Reliable {
   landmarks: Landmark[];
   /** Limb landmarks dropped because of low confidence, overlap or an implausible limb length. */
   unreliable: number[];
+  /**
+   * The subset of `unreliable` dropped purely for low confidence: the joint isn't seen, so its position is unknown.
+   * The rest were dropped for geometry (overlap / stretched limb): the model is placing them somewhere implausible,
+   * so their last good position can't stand in for them either.
+   */
+  unseen: number[];
 }
 
 /**
@@ -106,17 +112,19 @@ export class LandmarkReliability {
     }
 
     const unreliable: number[] = [];
+    const unseen: number[] = [];
     const landmarks = lm.slice();
     for (const i of BODY) {
       this.holdoff[i] = flagged.has(i) ? REARM_FRAMES : Math.max(0, this.holdoff[i] - 1);
       if (!this.trusted[i] || this.holdoff[i] > 0) {
         unreliable.push(i);
+        if (!this.trusted[i]) unseen.push(i);
         landmarks[i] = { ...lm[i], visibility: 0 };
       } else {
         landmarks[i] = { ...lm[i], visibility: this.vis[i] };
       }
     }
-    return { landmarks, unreliable };
+    return { landmarks, unreliable, unseen };
   }
 
   /** Shoulder-to-hip distance in pixels from whichever shoulders/hips are trusted; 0 if unknown. */

@@ -39,6 +39,9 @@ export interface RepConfig {
   start_threshold: number;
   /** Value that must be reached for the rep to count. */
   peak_threshold: number;
+  /** Optional validity limits on rep duration (start → back at start), in ms. See pose/repConstraints.ts. */
+  min_duration_ms?: number;
+  max_duration_ms?: number;
 }
 
 export interface FaultRule {
@@ -120,6 +123,16 @@ export interface FormIssue {
   side: Side | null;
   /** Detected from the last rep (depth/range) rather than live posture. */
   fromRep: boolean;
+  /** The reading behind the fault, so the coach can scale its wording to how far off the user is. */
+  measurement?: FaultMeasurement;
+}
+
+export interface FaultMeasurement {
+  metric: string;
+  value: number;
+  op: "<" | ">";
+  warn: number;
+  bad?: number;
 }
 
 export type RepPhase = "start" | "moving" | "peak";
@@ -139,6 +152,8 @@ export interface RepEvent {
   /** Range of motion achieved, 0-100. */
   rom: number;
   at: number;
+  /** How long the rep took, from leaving the start position to returning to it. */
+  duration_ms?: number;
   /** Faults found in this rep, major first (empty = a clean rep). */
   faults: FaultHit[];
   /** Why a rep wasn't counted when no fault explains it. */

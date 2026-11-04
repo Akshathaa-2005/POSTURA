@@ -243,3 +243,17 @@ export function bonePoint(
   const p = new THREE.Vector3(...offset).applyMatrix4(bones.get(bone)!.matrixWorld);
   return p.applyMatrix4(root.matrixWorld.clone().invert());
 }
+
+/** Time constants (ms) for easing the avatar towards the tracked pose, and back to neutral when tracking is lost. */
+export const MIMIC_TAU_MS = 50;
+export const RELAX_TAU_MS = 200;
+
+/**
+ * Slerp fraction for one frame of an exponential approach with time constant `tauMs`. Unlike a fixed per-frame factor
+ * the avatar responds at the same speed on 30, 60 and 144 Hz displays; `dtMs` is clamped so a stalled tab doesn't
+ * snap the pose when it wakes up.
+ */
+export function followFactor(dtMs: number, tauMs: number): number {
+  const dt = Math.min(Math.max(dtMs, 1), 100);
+  return 1 - Math.exp(-dt / tauMs);
+}

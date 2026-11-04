@@ -18,13 +18,15 @@ import {
   FLOOR_Y,
   groundAvatar,
 } from "@/utils/avatarRig";
+import { followFactor, MIMIC_TAU_MS, RELAX_TAU_MS } from "@/utils/avatarRig";
 import type { GroundAnchor } from "@/utils/avatarRig";
 import { clampAnatomicalRotation } from "@/utils/kinematicSolver";
 import { createGlbRetargeter, findGlbBones, fitScaleToRig, missingRigBones } from "@/utils/glbRetarget";
 import type { GlbRetargeter } from "@/utils/glbRetarget";
 
 /** Blender-exported character (see docs/blender-export.md). Served from frontend/public/models. */
-const AVATAR_MODEL_URL = "/models/avatar.glb";
+// avatar_fixed.glb = avatar.glb with straight hands and smoothed weights (backend/scripts/blender_fix_avatar_rig.py)
+const AVATAR_MODEL_URL = "/models/avatar_fixed.glb";
 
 type ModelStatus = "loading" | "ready" | "error";
 
@@ -53,7 +55,20 @@ interface ActiveTween {
   easing: "easeInOutQuad" | "easeOutCubic" | "linear";
 }
 
-export type AvatarVisualizationMode = "clay" | "rig" | "bands" | "full";
+/** Default outward tilt (deg) of the upper arms so the glb's sleeves don't clip into the torso. */
+const REST_ARM_ABDUCT_DEG = 12;
+
+/** "clay" = body only; "rig" adds the kinematic joint dots and bone lines. */
+export type AvatarVisualizationMode = "clay" | "rig";
+
+/** Control-bar pill: same active / idle treatment as the site's Toggle (slate fill vs. stone text). */
+const segment = (active: boolean) =>
+  `rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-forest/30 ${
+    active ? "border-slate bg-slate text-linen" : "border-transparent text-stone hover:text-ink"
+  }`;
+
+/** Floating status chip drawn over the viewport. */
+const CHIP = "inline-flex items-center gap-2 rounded-full border border-slate/[0.07] bg-linen/90 px-3 py-1 text-[11px] text-ink shadow-soft backdrop-blur-sm";
 export type AvatarControlMode = "mimic" | "coach";
 
 export default function AvatarCoach3D({
@@ -70,7 +85,7 @@ export default function AvatarCoach3D({
 }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
   const [viewAngle, setViewAngle] = useState<"perspective" | "side" | "front">(defaultView);
-  const [visMode, setVisMode] = useState<AvatarVisualizationMode>("rig"); // defaults to Figure 3 (Kinematic Rig)
+  const [visMode, setVisMode] = useState<AvatarVisualizationMode>("clay"); // markers off by default; "rig" is Figure 3 (Kinematic Rig)
   const [controlMode, setControlMode] = useState<AvatarControlMode>("mimic");
   // glb load state; on "error" the procedural clay body below stays visible as a fallback
   const [modelStatus, setModelStatus] = useState<ModelStatus>("loading");
@@ -117,9 +132,8 @@ export default function AvatarCoach3D({
   const tweensRef = useRef<ActiveTween[]>([]);
   const reqIdRef = useRef<number | null>(null);
 
-  // Groups for toggleable visualization overlays (Figures 3 & 4)
+  // Group for the optional kinematic-rig overlay
   const rigOverlayGroupRef = useRef<THREE.Group | null>(null);
-  const bandsOverlayGroupRef = useRef<THREE.Group | null>(null);
 
   // Anatomical animation refs for subtle lifelike motion
   const chestMeshRef = useRef<THREE.Object3D | null>(null);
@@ -174,38 +188,15 @@ export default function AvatarCoach3D({
       groundAvatar(bonesRef.current, orbitGroupRef.current, groundingRef.current, anchorRef.current);
       centerAvatar(bonesRef.current, orbitGroupRef.current, groundingRef.current);
     }
-
-    jointMeshesRef.current.forEach((mesh) => {
-      const mat = mesh.material as THREE.MeshStandardMaterial;
-      mat.color.setHex(0xe53935);
-      mat.emissive.setHex(0x991b1b);
-    });
   }, [exerciseId]);
 
   /** Schedules a single keyframe phase onto the tween queue. */
   const scheduleKeyframe = useCallback((
     kf: ExerciseKeyframe,
-    highlightJoints: string[],
     delayMs: number
   ) => {
     const id = setTimeout(() => {
       const now = performance.now();
-
-      // ── Update joint highlights ──────────────────────────────────────────────
-      const activeHighlights = kf.highlightJoints ?? highlightJoints;
-      jointMeshesRef.current.forEach((mesh, name) => {
-        const mat = mesh.material as THREE.MeshStandardMaterial;
-        const isHighlighted = activeHighlights.some(
-          (j) => j.toLowerCase() === name.toLowerCase() || name.toLowerCase().includes(j.toLowerCase())
-        );
-        if (isHighlighted) {
-          mat.color.setHex(0xffaa00);
-          mat.emissive.setHex(0xff7700);
-        } else {
-          mat.color.setHex(0xe53935);
-          mat.emissive.setHex(0x881111);
-        }
-      });
 
       // ── Update coach cue overlay ─────────────────────────────────────────────
       setCoachCue(kf.cue);
@@ -276,26 +267,11 @@ export default function AvatarCoach3D({
     setCoachCue(seq.verbalCue);
     setReplayPhaseLabel(seq.keyframes[0]?.phaseLabel ?? null);
 
-    // ── 4. Apply initial joint highlights ───────────────────────────────────
-    jointMeshesRef.current.forEach((mesh, name) => {
-      const mat = mesh.material as THREE.MeshStandardMaterial;
-      const isHighlighted = seq.highlightJoints.some(
-        (j) => j.toLowerCase() === name.toLowerCase() || name.toLowerCase().includes(j.toLowerCase())
-      );
-      if (isHighlighted) {
-        mat.color.setHex(0xffaa00);
-        mat.emissive.setHex(0xff7700);
-      } else {
-        mat.color.setHex(0xe53935);
-        mat.emissive.setHex(0x881111);
-      }
-    });
-
     // ── 5. Schedule each keyframe as a chained delay ────────────────────────
     // Each keyframe fires after all previous durations have elapsed
     let cumulativeDelay = 0;
     for (const kf of seq.keyframes) {
-      scheduleKeyframe(kf, seq.highlightJoints, cumulativeDelay);
+      scheduleKeyframe(kf, cumulativeDelay);
       cumulativeDelay += kf.durationMs;
     }
 
@@ -309,14 +285,11 @@ export default function AvatarCoach3D({
 
 
 
-  // Update overlay visibility when visMode changes
+  // Show the rig dots and lines only in "rig" mode
   useEffect(() => {
-    if (rigOverlayGroupRef.current) {
-      rigOverlayGroupRef.current.visible = visMode === "rig" || visMode === "full";
-    }
-    if (bandsOverlayGroupRef.current) {
-      bandsOverlayGroupRef.current.visible = visMode === "bands" || visMode === "full";
-    }
+    const on = visMode === "rig";
+    rigOverlayGroupRef.current?.children.forEach((o) => (o.visible = on));
+    jointMeshesRef.current.forEach((m) => (m.visible = on));
   }, [visMode]);
 
   // Construct the SMPL / Anatomical Clay Studio Scene
@@ -330,7 +303,7 @@ export default function AvatarCoach3D({
     const scene = new THREE.Scene();
     sceneRef.current = scene;
     // Dark studio background matching reference image
-    scene.background = new THREE.Color(0x0a0c10);
+    // No scene background: the canvas is transparent so the card's own surface colour shows through
 
     const camera = new THREE.PerspectiveCamera(35, width / height, 0.1, 50);
     camera.position.set(0, 1.0, 3.4);
@@ -350,14 +323,10 @@ export default function AvatarCoach3D({
     orbitGroupRef.current = orbitGroup;
     scene.add(orbitGroup);
 
-    // Overlay groups for Kinematic Skeleton (Fig 3) and Measurement Bands (Fig 4)
+    // Overlay group for the Kinematic Skeleton
     const rigOverlayGroup = new THREE.Group();
     rigOverlayGroupRef.current = rigOverlayGroup;
     orbitGroup.add(rigOverlayGroup);
-
-    const bandsOverlayGroup = new THREE.Group();
-    bandsOverlayGroupRef.current = bandsOverlayGroup;
-    orbitGroup.add(bandsOverlayGroup);
 
     // Studio Lighting setup to sculpt anatomical muscle contours
     // Soft, even base light: sky/ground hemisphere instead of flat ambient
@@ -390,12 +359,12 @@ export default function AvatarCoach3D({
     scene.environmentIntensity = 0.45;
     pmrem.dispose();
 
-    // Dark floor pedestal
+    // Floor pedestal in the site's "sand" tone
     const floorGeo = new THREE.CircleGeometry(1.4, 64);
     const floorMat = new THREE.MeshStandardMaterial({
-      color: 0x12151b,
+      color: 0xddd3c0, // sand
       roughness: 0.95,
-      metalness: 0.1,
+      metalness: 0.0,
     });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
@@ -407,7 +376,7 @@ export default function AvatarCoach3D({
     // Anatomical Clay Shader (Neutral Gray Matte Clay)
     // ========================================================
     const clayMat = new THREE.MeshStandardMaterial({
-      color: 0xaeb4bd, // Light neutral grey; red joints/bands are the single accent
+      color: 0xaeb4bd, // Light neutral grey
       roughness: 0.68,
       metalness: 0.0,
     });
@@ -419,22 +388,15 @@ export default function AvatarCoach3D({
       metalness: 0.0,
     });
 
-    // Kinematic Rig materials (Figure 3)
-    const redJointMat = new THREE.MeshStandardMaterial({
-      color: 0xe53935, // bright red dot
-      emissive: 0x881111,
-      roughness: 0.2,
-      metalness: 0.1,
+    // Kinematic rig overlay, in the site's forest / blue-grey tones
+    const rigJointMat = new THREE.MeshStandardMaterial({
+      color: 0x1f4a2e, // forest
+      roughness: 0.3,
+      metalness: 0.0,
     });
 
-    const redLineMat = new THREE.LineBasicMaterial({
-      color: 0xee2222,
-      linewidth: 2,
-    });
-
-    // Measurement Bands material (Figure 4)
-    const bandMat = new THREE.LineBasicMaterial({
-      color: 0xd32f2f,
+    const rigLineMat = new THREE.LineBasicMaterial({
+      color: 0x5f829a, // good
       linewidth: 2,
     });
 
@@ -444,24 +406,11 @@ export default function AvatarCoach3D({
 
     const makeJoint = (name: string, radius = 0.026) => {
       const geo = new THREE.SphereGeometry(radius, 16, 16);
-      const mesh = new THREE.Mesh(geo, redJointMat.clone());
+      const mesh = new THREE.Mesh(geo, rigJointMat.clone());
       mesh.renderOrder = 2;
       jointMeshes.set(name, mesh);
       rigOverlayGroup.add(mesh);
       return mesh;
-    };
-
-    // Helper to draw horizontal measurement band rings
-    const makeBandRing = (radiusX: number, radiusZ: number, y: number, parent: THREE.Object3D) => {
-      const curve = new THREE.EllipseCurve(0, 0, radiusX, radiusZ, 0, 2 * Math.PI, false, 0);
-      const points = curve.getPoints(48);
-      const geo = new THREE.BufferGeometry().setFromPoints(
-        points.map((p) => new THREE.Vector3(p.x, y, p.y))
-      );
-      const line = new THREE.LineLoop(geo, bandMat);
-      line.renderOrder = 3;
-      parent.add(line);
-      return line;
     };
 
     // Helper for kinematic bone connection lines
@@ -470,7 +419,7 @@ export default function AvatarCoach3D({
         new THREE.Vector3(),
         new THREE.Vector3(),
       ]);
-      const line = new THREE.Line(geo, redLineMat);
+      const line = new THREE.Line(geo, rigLineMat);
       line.renderOrder = 2;
       rigOverlayGroup.add(line);
       return { line, objA, objB };
@@ -739,31 +688,6 @@ export default function AvatarCoach3D({
     kinematicLinks.push(linkKinematicBones(rightKneeJoint, rightAnkleJoint));
 
     // ========================================================
-    // Biomechanical Measurement Rings Setup (Figure 4)
-    // ========================================================
-    // Headband
-    makeBandRing(0.088, 0.096, 0.08, head);
-    // Neck band
-    makeBandRing(0.052, 0.052, 0.04, neck);
-    // Upper Chest band
-    makeBandRing(0.185, 0.138, 0.14, spine1);
-    // Lower Chest / Bust band
-    makeBandRing(0.172, 0.126, 0.06, spine1);
-    // Waist band
-    makeBandRing(0.148, 0.116, 0.05, spine);
-    // Hip circumference band
-    makeBandRing(0.162, 0.138, -0.02, hips);
-    // Thigh cross-section bands
-    makeBandRing(0.068, 0.068, -0.16, leftUpLeg);
-    makeBandRing(0.068, 0.068, -0.16, rightUpLeg);
-    // Calf cross-section bands
-    makeBandRing(0.052, 0.052, -0.16, leftLeg);
-    makeBandRing(0.052, 0.052, -0.16, rightLeg);
-    // Wrist bands
-    makeBandRing(0.038, 0.038, -0.21, leftForeArm);
-    makeBandRing(0.038, 0.038, -0.21, rightForeArm);
-
-    // ========================================================
     // Silhouette outline: inverted-hull shell per body mesh
     // ========================================================
     const outlineMat = new THREE.MeshBasicMaterial({ color: 0x1c2027, side: THREE.BackSide });
@@ -785,8 +709,8 @@ export default function AvatarCoach3D({
     });
 
     // Initial overlay mode visibility
-    rigOverlayGroup.visible = visMode === "rig" || visMode === "full";
-    bandsOverlayGroup.visible = visMode === "bands" || visMode === "full";
+    rigOverlayGroup.children.forEach((o) => (o.visible = visMode === "rig"));
+    jointMeshes.forEach((m) => (m.visible = visMode === "rig"));
 
     bonesRef.current = bones;
     jointMeshesRef.current = jointMeshes;
@@ -840,13 +764,23 @@ export default function AvatarCoach3D({
         model.scale.setScalar(scale);
         orbitGroup.add(model);
         retargeter = createGlbRetargeter(bones, glbBones, orbitGroup);
+        // The character's torso / sleeves are wider than the logical rig, so arms hanging straight down clip into
+        // the body. Bake a slight outward tilt into the default pose (after the bind capture, so the glb follows).
+        const restAbductDeg = REST_ARM_ABDUCT_DEG;
+        (["LeftArm", "RightArm"] as const).forEach((name) => {
+          const bone = bones.get(name);
+          if (!bone) return;
+          const sign = name === "LeftArm" ? -1 : 1;
+          bone.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), sign * THREE.MathUtils.degToRad(restAbductDeg)));
+          initialQuaternionsRef.current.set(name, bone.quaternion.clone());
+        });
         retargeter.update();
         glbRoot = model;
 
         // Swap the procedural body for the glb. Rig dots/lines must draw through the opaque skin.
         bodyMeshes.forEach((m) => (m.visible = false));
         jointMeshes.forEach((m) => ((m.material as THREE.Material).depthTest = false));
-        redLineMat.depthTest = false;
+        rigLineMat.depthTest = false;
 
         setModelStatus("ready");
       },
@@ -888,10 +822,14 @@ export default function AvatarCoach3D({
     const swayEuler = new THREE.Euler();
     const swayQuat = new THREE.Quaternion();
 
+    let lastFrameMs = performance.now();
+
     const animate = () => {
       reqIdRef.current = requestAnimationFrame(animate);
 
       const now = performance.now();
+      const dtMs = now - lastFrameMs;
+      lastFrameMs = now;
       const timeSec = now * 0.001;
       const tweens = tweensRef.current;
 
@@ -908,7 +846,7 @@ export default function AvatarCoach3D({
           // Smoothly slerp each solved bone to mimic user's physical pose in real time
           solved.boneQuaternions.forEach((targetQuat, boneName) => {
             const bone = boneName === "Head" ? headBaseRef.current : bonesRef.current.get(boneName);
-            bone?.quaternion.slerp(targetQuat, 0.32);
+            bone?.quaternion.slerp(targetQuat, followFactor(dtMs, MIMIC_TAU_MS));
           });
         }
       }
@@ -917,9 +855,9 @@ export default function AvatarCoach3D({
         // Camera is active but user is momentarily out of frame: gently relax to neutral upright pose
         bonesRef.current.forEach((bone, name) => {
           const initQuat = initialQuaternionsRef.current.get(name);
-          if (initQuat) bone.quaternion.slerp(initQuat, 0.08);
+          if (initQuat) bone.quaternion.slerp(initQuat, followFactor(dtMs, RELAX_TAU_MS));
         });
-        headBaseRef.current.quaternion.slerp(identityQuat, 0.08);
+        headBaseRef.current.quaternion.slerp(identityQuat, followFactor(dtMs, RELAX_TAU_MS));
       }
 
       if (!isMimic) {
@@ -1058,206 +996,132 @@ export default function AvatarCoach3D({
   }, [defaultView, setCameraPreset]);
 
   useEffect(() => {
-    if (!command) {
-      // Clear highlight if no active command
-      jointMeshesRef.current.forEach((mesh) => {
-        const mat = mesh.material as THREE.MeshStandardMaterial;
-        mat.color.setHex(0xe53935);
-        mat.emissive.setHex(0x881111);
-      });
-      return;
-    }
-
-    // Always highlight flagged joints on the live avatar
-    jointMeshesRef.current.forEach((mesh, name) => {
-      const mat = mesh.material as THREE.MeshStandardMaterial;
-      const isHighlighted = command.highlight_joints?.some(
-        (j) => j.toLowerCase() === name.toLowerCase() || name.toLowerCase().includes(j.toLowerCase())
-      );
-      if (isHighlighted) {
-        mat.color.setHex(0xffaa00);
-        mat.emissive.setHex(0xff7700);
-      } else {
-        mat.color.setHex(0xe53935);
-        mat.emissive.setHex(0x881111);
-      }
-    });
+    if (!command) return;
 
     if (autoPlay && controlMode === "coach") {
       applyCommand(command);
     }
   }, [command, autoPlay, controlMode, applyCommand]);
 
+  const startDemo = () => {
+    setControlMode("coach");
+    applyCommand(command ?? null);
+  };
+
   return (
-    <div className={`relative flex flex-col h-full w-full rounded-2xl bg-[#0a0c10] border border-slate/20 overflow-hidden ${className}`}>
+    <div className={`relative flex h-full w-full flex-col overflow-hidden rounded-2xl border border-slate/[0.07] bg-mist/40 ${className}`}>
       {/* 3D Viewport */}
-      <div ref={mountRef} className="relative flex-1 w-full min-h-[380px] cursor-grab active:cursor-grabbing">
-        {/* Status indicator badge */}
-        <div className="absolute top-3 left-3 z-10 flex items-center gap-2 rounded-full bg-[#10141b]/85 px-3 py-1 text-[11px] border border-slate-700/50 backdrop-blur-md">
+      <div ref={mountRef} className="relative min-h-[380px] w-full flex-1 cursor-grab active:cursor-grabbing">
+        {/* Status chip */}
+        <div className={`absolute left-3 top-3 z-10 ${CHIP}`} role="status">
           {controlMode === "mimic" ? (
             cameraOn ? (
               <>
                 <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-done/60" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-done" />
                 </span>
-                <span className="text-emerald-300 font-medium">Live Motion Mirror · 60 FPS</span>
+                <span>Live Motion Mirror · 60 FPS</span>
               </>
             ) : (
               <>
-                <span className="h-2 w-2 rounded-full bg-amber-400/80" />
-                <span className="text-stone-300">Awaiting Camera Feed</span>
+                <span className="h-2 w-2 rounded-full bg-warn" />
+                <span className="text-stone">Awaiting camera feed</span>
               </>
             )
           ) : (
             <>
-              <span className="h-2 w-2 rounded-full bg-blue-400" />
-              <span className="text-blue-200 font-medium">Coach Guidance Demo</span>
+              <span className="h-2 w-2 rounded-full bg-good" />
+              <span>Coach guidance demo</span>
             </>
           )}
         </div>
 
         {/* glb load indicator (the clay placeholder body is visible underneath until it finishes) */}
         {modelStatus === "loading" && (
-          <div className="absolute top-3 right-3 z-10 flex items-center gap-2 rounded-full bg-[#10141b]/85 px-3 py-1 text-[11px] text-slate-300 border border-slate-700/50 backdrop-blur-md">
-            <span className="h-3 w-3 rounded-full border-2 border-slate-500 border-t-slate-200 animate-spin" />
+          <div className={`absolute right-3 top-3 z-10 text-stone ${CHIP}`}>
+            <span className="h-3 w-3 animate-spin rounded-full border-2 border-stone/30 border-t-ink" />
             Loading model{modelProgress !== null ? ` ${Math.round(modelProgress * 100)}%` : "…"}
           </div>
         )}
         {modelStatus === "error" && (
           <div
-            className="absolute top-3 right-3 z-10 rounded-full bg-amber-900/60 px-3 py-1 text-[11px] text-amber-200 border border-amber-700/50 backdrop-blur-md"
+            className="absolute right-3 top-3 z-10 rounded-full border border-bad/20 bg-bad/10 px-3 py-1 text-[11px] text-bad"
             title={`Could not load ${AVATAR_MODEL_URL}; showing the built-in placeholder body`}
           >
             Model unavailable · placeholder shown
           </div>
         )}
 
-        {/* Coach verbal cue + phase label overlay — shown during replay demos */}
+        {/* Coach verbal cue + phase label overlay: shown during replay demos */}
         {coachCue && (
-          <div className="absolute bottom-3 left-3 right-3 z-20 pointer-events-none">
+          <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20">
             {replayPhaseLabel && (
-              <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-blue-600/80 px-2.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm border border-blue-400/30">
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-200 animate-pulse" />
+              <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-forest/15 bg-forest/10 px-2.5 py-0.5 text-[11px] font-medium text-forest">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-forest" />
                 {replayPhaseLabel}
               </div>
             )}
-            <div className="rounded-xl bg-[#0a0c10]/85 border border-slate-700/50 px-3 py-2 text-[12px] text-slate-100 leading-snug backdrop-blur-md shadow-xl">
+            <div className="rounded-xl border border-slate/[0.07] bg-linen/95 px-3 py-2 font-display text-sm italic leading-snug text-slate shadow-soft backdrop-blur-sm">
               {coachCue}
             </div>
           </div>
         )}
       </div>
 
-      {/* Aesthetic SMPL Model Control Bar */}
-      <div className="flex flex-wrap items-center justify-between border-t border-slate/20 bg-[#10141b]/90 px-4 py-2.5 text-xs text-slate-300 backdrop-blur-md">
-        {/* Tracking Mode Switcher (Mimic Live vs Coach Demo) */}
-        <div className="flex items-center gap-1.5 border-r border-slate-700/60 pr-2">
+      {/* Control bar */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-slate/[0.07] bg-linen px-4 py-2.5 text-xs text-stone">
+        {/* Tracking mode: live mimicry vs. coach demo */}
+        <div className="flex items-center gap-1" role="group" aria-label="Avatar mode">
           <button
             onClick={() => setControlMode("mimic")}
-            className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition flex items-center gap-1.5 ${
-              controlMode === "mimic"
-                ? "bg-emerald-600 text-white shadow-sm"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-            title="Real-time 60 FPS Motion-Capture Digital Twin"
+            aria-pressed={controlMode === "mimic"}
+            className={`${segment(controlMode === "mimic")} inline-flex items-center gap-1.5`}
+            title="Real-time motion mirror"
           >
-            <span className={`h-1.5 w-1.5 rounded-full ${cameraOn ? "bg-emerald-200 animate-pulse" : "bg-slate-400"}`} />
+            <span className={`h-1.5 w-1.5 rounded-full ${cameraOn ? "animate-pulse bg-done" : "bg-stone/50"}`} />
             Mimic Live
           </button>
           <button
-            onClick={() => {
-              setControlMode("coach");
-              applyCommand(command ?? null);
-            }}
-            className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition flex items-center gap-1.5 ${
-              controlMode === "coach"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-            title="Demonstrate Corrected Form"
+            onClick={startDemo}
+            aria-pressed={controlMode === "coach"}
+            className={segment(controlMode === "coach")}
+            title="Demonstrate corrected form"
           >
             Coach Demo
           </button>
         </div>
 
-        {/* Visualization Modes (matching the 4 figures in reference image) */}
-        <div className="flex items-center gap-1">
-          <span className="eyebrow !text-[10px] mr-1.5 text-slate-400">Mode:</span>
-          <button
-            onClick={() => setVisMode("clay")}
-            className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition ${
-              visMode === "clay" ? "bg-slate-200 text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-200"
-            }`}
-            title="Clean Anatomical Clay Mesh (Fig 1 & 2)"
-          >
+        {/* Body only, or with the kinematic rig overlay */}
+        <div className="flex items-center gap-1" role="group" aria-label="Display">
+          <span className="eyebrow mr-1.5 !text-[10px]">Display</span>
+          <button onClick={() => setVisMode("clay")} aria-pressed={visMode === "clay"} className={segment(visMode === "clay")} title="Body only">
             Body
           </button>
-          <button
-            onClick={() => setVisMode("rig")}
-            className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition ${
-              visMode === "rig" ? "bg-red-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"
-            }`}
-            title="Kinematic Skeleton Rig (Fig 3)"
-          >
-            Kinematic Rig
-          </button>
-          <button
-            onClick={() => setVisMode("bands")}
-            className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition ${
-              visMode === "bands" ? "bg-red-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"
-            }`}
-            title="Biomechanical Measurement Bands (Fig 4)"
-          >
-            Bands
-          </button>
-          <button
-            onClick={() => setVisMode("full")}
-            className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition ${
-              visMode === "full" ? "bg-red-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"
-            }`}
-            title="Complete Rig & Measurement Overlay"
-          >
-            Full
+          <button onClick={() => setVisMode("rig")} aria-pressed={visMode === "rig"} className={segment(visMode === "rig")} title="Show the kinematic skeleton">
+            Skeleton
           </button>
         </div>
 
-        {/* Camera Angles & Action */}
-        <div className="flex items-center gap-2 mt-1 sm:mt-0">
-          <div className="flex items-center gap-1 border-r border-slate-700/60 pr-2">
-            <button
-              onClick={() => setCameraPreset("perspective")}
-              className={`rounded-full px-2 py-0.5 text-[10px] ${viewAngle === "perspective" ? "text-white font-medium" : "text-slate-400"}`}
-            >
-              3/4
-            </button>
-            <button
-              onClick={() => setCameraPreset("side")}
-              className={`rounded-full px-2 py-0.5 text-[10px] ${viewAngle === "side" ? "text-white font-medium" : "text-slate-400"}`}
-            >
-              Side
-            </button>
-            <button
-              onClick={() => setCameraPreset("front")}
-              className={`rounded-full px-2 py-0.5 text-[10px] ${viewAngle === "front" ? "text-white font-medium" : "text-slate-400"}`}
-            >
-              Front
-            </button>
+        {/* Camera angle and actions */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1" role="group" aria-label="Camera angle">
+            {([["perspective", "3/4"], ["side", "Side"], ["front", "Front"]] as const).map(([view, label]) => (
+              <button key={view} onClick={() => setCameraPreset(view)} aria-pressed={viewAngle === view} className={segment(viewAngle === view)}>
+                {label}
+              </button>
+            ))}
           </div>
-
           <button
-            onClick={() => {
-              setControlMode("coach");
-              applyCommand(command ?? null);
-            }}
-            className="rounded-full bg-red-600/20 text-red-400 hover:bg-red-600/30 px-2.5 py-0.5 text-[11px] font-medium transition"
-            title={command ? "Replay full exercise repetition with corrected form demo" : "Demonstrate a full repetition with correct form"}
+            onClick={startDemo}
+            className="rounded-full border border-forest bg-forest px-3 py-0.5 text-[11px] font-medium text-linen transition hover:bg-forest/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-forest/30"
+            title={command ? "Replay a full repetition with corrected form" : "Demonstrate a full repetition with correct form"}
           >
-            {command ? "Replay Fix" : "Play Demo"}
+            {command ? "Replay fix" : "Play demo"}
           </button>
           <button
             onClick={resetPose}
-            className="rounded-full bg-slate-800 text-slate-300 hover:text-white px-2 py-0.5 text-[10px] transition"
+            className="rounded-full border border-slate/15 px-2.5 py-0.5 text-[11px] text-stone transition hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-forest/30"
           >
             Reset
           </button>

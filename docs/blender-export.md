@@ -56,3 +56,20 @@ Textures are embedded in the `.glb`, so there are no side files. Save as
   `npx gltf-transform optimize avatar.glb avatar.glb --compress meshopt --texture-compress webp`.
   The viewer already registers the meshopt decoder. Draco would need decoder files hosted under `public/`, so prefer meshopt.
 - **Loading % stays blank**: the server sent no `Content-Length` (e.g. gzip). The spinner still shows.
+
+## 4. Automated rig clean-up
+
+`backend/scripts/blender_fix_avatar_rig.py` applies the fixes below to `avatar_hood_postura.blend` and exports a GLB
+(`avatar.glb` stays untouched; the viewer loads `avatar_fixed.glb`):
+
+    blender -b assets/avatar/avatar_hood_postura.blend \
+        --python backend/scripts/blender_fix_avatar_rig.py -- frontend/public/models/avatar_fixed.glb
+
+- **Hands**: hand and finger chains are straightened (hand in line with the forearm, each finger segment in line with
+  the previous one; palm splay and thumb root kept) and baked into the mesh and the rest pose. The viewer never drives
+  hand bones, so whatever the bind pose is, is what you see.
+- **Weights**: hard cuts (neighbouring vertices sharing almost no bones, mostly the jacket's shoulder seam) are smoothed,
+  then capped at 4 influences and normalised. Rest geometry is unchanged. The hood is skipped on purpose.
+- **Markers**: bone axes and custom bone shapes are switched off and only the meshes and the armature are exported.
+  The `Icosphere` that appears after importing a GLB into Blender is the importer's bone-shape helper, not part of the file.
+- Check the result with the same script's log, then re-import the GLB: every hand segment should measure 0° bend.

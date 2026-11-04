@@ -517,3 +517,45 @@ describe("score validity (no false maximums)", () => {
     expect(last(wild).score).toBeCloseTo(last(clean).score!, 0);
   });
 });
+
+describe("pose robustness", () => {
+  const hk = () => getExercise("high_knees")!;
+  const cycle = [frontPose({}), frontPose({ leftKneeY: 605 }), frontPose({})];
+
+  it("rejects a rep that is faster than the exercise's min_duration_ms, and says why", () => {
+    const fast = { ...hk(), rep: { ...hk().rep!, min_duration_ms: 5000 } };
+    const r = run(new WorkoutEngine(fast), cycle);
+    expect(r.reps).toHaveLength(1);
+    expect(r.reps[0]).toMatchObject({ type: "partial", note: expect.stringContaining("Slow down") });
+    expect(last(r).reps).toBe(0);
+  });
+
+  it("counts the same rep when the tempo limits are satisfied", () => {
+    const ok = { ...hk(), rep: { ...hk().rep!, min_duration_ms: 100, max_duration_ms: 5000 } };
+    const r = run(new WorkoutEngine(ok), cycle);
+    expect(r.reps.map((e) => e.type)).toEqual(["rep"]);
+    expect(r.reps[0].duration_ms).toBeGreaterThan(100);
+  });
+
+  it("keeps the tracked metric measurable through a brief occlusion of the working knee", () => {
+    const eng = new WorkoutEngine(hk());
+    const up = frontPose({ leftKneeY: 605 });
+    const inFrame: boolean[] = [];
+    const frames = [...Array(10).fill(frontPose({})), ...Array(10).fill(up)];
+    frames.forEach((p, i) => {
+      // Both knees go unseen for 4 frames (~130 ms), well under MAX_GAP_MS.
+      const lost = i >= 12 && i < 16;
+      const lm = lost ? p.map((l: Landmark, k: number) => (k === 25 || k === 26 ? { ...l, visibility: 0.05 } : l)) : p;
+      inFrame.push(eng.process(lm, W, H, i * FRAME_MS).inFrame);
+    });
+    expect(inFrame.slice(12, 16)).toEqual([true, true, true, true]);
+  });
+
+  it("does not freeze a joint the model is mis-placing (geometric drop, not low confidence)", () => {
+    // Regression: imputing these held the knee at its old height and delayed the end of the rep.
+    const r = run(new WorkoutEngine(hk()), [
+      frontPose({}), frontPose({ leftKneeY: 605 }), frontPose({}), frontPose({ leftKneeY: 635 }), frontPose({}),
+    ]);
+    expect(r.reps.map((e) => [e.type, e.faults.map((f) => f.rule.id)])).toEqual([["rep", []], ["rep", ["low_knees"]]]);
+  });
+});

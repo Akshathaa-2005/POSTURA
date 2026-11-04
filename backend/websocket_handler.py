@@ -7,7 +7,8 @@ the authored cue), speaks them (TTS), paces them so the coach doesn't nag, and p
 Protocol (JSON messages):
   client → server
     {"type": "start", "exercise_id"}                                   begin a workout session
-    {"type": "issue", "fault_id", "status": "warn"|"bad", "side", "from_rep"}
+    {"type": "issue", "fault_id", "status": "warn"|"bad", "side", "from_rep",
+     "measurement": {"metric", "value", "op", "warn", "bad"}?, "model_prob"?}
     {"type": "praise"}                                                  a run of clean reps
     {"type": "rep", "event": "rep"|"partial", "reps", "rom"}
     {"type": "end", "reps", "avg_score", "duration_sec"}               finish and persist
@@ -194,7 +195,8 @@ class CoachSession:
         try:
             cue = fault_cue(self.exercise, fault, msg.side)
             text, source = await generate_correction(
-                self.exercise, fault["id"], fault["label"], cue, msg.status, msg.side, msg.from_rep
+                self.exercise, fault["id"], fault["label"], cue, msg.status, msg.side, msg.from_rep,
+                msg.measurement, msg.model_prob,
             )
             avatar_cmd = generate_avatar_command(self.exercise, fault["id"], text, msg.side)
             await self.send(

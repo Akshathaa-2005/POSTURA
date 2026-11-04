@@ -1,7 +1,6 @@
 # Postura — AI Pose Coach
 
-Real-time AI fitness coaching with in-browser pose detection. See
-`AI Coach - Pose Estimation Platform Architecture.pdf` for the full design.
+Real-time AI fitness coaching with in-browser pose detection. See `ARCHITECTURE.md` for the full design.
 
 ## Status
 
@@ -10,7 +9,8 @@ Real-time AI fitness coaching with in-browser pose detection. See
 | 1 | MVP frontend (Next.js, MediaPipe, skeleton, form score, reps, dashboard, exercise selection) | ✅ Done |
 | 2 | FastAPI backend, WebSocket, Postgres, Ollama corrections, TTS | ✅ Done |
 | 3 | 22 exercises incl. timed holds, correction visuals + Stable Diffusion pipeline, LLM prompting, error handling | ✅ Done |
-| 4 | Polish, session summary, auth, deployment | Not started |
+| 3b | 3D avatar coach (Blender `.glb`, live mimic + corrections), AI workout & diet plan generator (`/plan`), robust pose layer (One-Euro, gap filling), ST-GCN form model (built, awaiting real data) | ✅ Done (see [ARCHITECTURE.md](ARCHITECTURE.md)) |
+| 4 | Polish, auth, deployment | Not started |
 
 ## Run locally
 
@@ -35,7 +35,7 @@ the backend only receives detected faults, rep events and session totals.
 
 | Service | Without it | To enable |
 |---|---|---|
-| Ollama (Mistral 7B) | Template corrections from the exercise database | `brew install ollama && ollama serve`, then `ollama pull mistral` |
+| Ollama (Mistral 7B) | Template corrections from the exercise database; `/plan` generation returns 503 | `brew install ollama && ollama serve`, then `ollama pull mistral` |
 | PostgreSQL | SQLite file `backend/ai_coach.db` | `docker compose -f backend/docker-compose.yml up -d db`, then set `DATABASE_URL` in `backend/.env` |
 | Backend itself | Frontend still gives full on-device visual feedback | — |
 
@@ -44,6 +44,8 @@ the backend only receives detected faults, rep events and session totals.
 Check what's active: `curl localhost:8000/api/health`.
 
 Tests: `cd frontend && npm test` (guidance engine) · `cd backend && .venv/bin/python -m pytest`.
+
+Full CV and LLM walkthrough: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 ## How guidance works
 

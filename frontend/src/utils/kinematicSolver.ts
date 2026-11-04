@@ -4,7 +4,7 @@ import type { Landmark } from "@/types/mediapipe";
 import { LM } from "@/types/mediapipe";
 
 /**
- * Biomechanically grounded kinematic solver inspired by Kalidokit principles.
+ * Biomechanically grounded kinematic solver (custom; no Kalidokit dependency).
  * Ensures human-like joint retargeting, continuous spring-damper interpolation,
  * and physiological limits (preventing robotic snapping and unnatural postures).
  */
@@ -85,11 +85,25 @@ export interface SolveOptions {
   aspect?: number;
 }
 
+/** MediaPipe landmarks with every LEFT_* / RIGHT_* pair exchanged. */
+const LM_SWAPPED = Object.fromEntries(
+  Object.entries(LM).map(([k, v]) => [
+    k.startsWith("LEFT_") ? `RIGHT_${k.slice(5)}` : k.startsWith("RIGHT_") ? `LEFT_${k.slice(6)}` : k,
+    v,
+  ])
+) as typeof LM;
+
 const DOWN = new THREE.Vector3(0, -1, 0);
 const UP = new THREE.Vector3(0, 1, 0);
 const FORWARD = new THREE.Vector3(0, 0, 1);
 /** MediaPipe's monocular depth is noisy; trust it at well under face value. */
 const DEPTH_SCALE = 0.6;
+/**
+ * Elbow→wrist depth is the least reliable reading (the hand is small, often near the face or occluded) and an
+ * error there swings the hand towards or away from the camera, e.g. a flexed bicep ending up in front of the face.
+ * The image-plane direction is trusted far more, so depth counts for much less on the forearm.
+ */
+const FOREARM_DEPTH_SCALE = 0.2;
 /** Limbs need confident, in-frame landmarks; low-visibility guesses at the frame edge fold the legs up. */
 const LIMB_VISIBILITY = 0.5;
 const ARM_REST_ABDUCTION_DEG = 8;
@@ -119,6 +133,11 @@ export function solveLandmarksToAvatar(
 ): SolvedAvatarPose | null {
   if (!landmarks || landmarks.length < 29) return null;
 
+  // The logical rig's "Left" bones are on screen-left. In the mirrored view screen-left shows the user's LEFT side;
+  // in the raw camera view it shows their RIGHT side. Feeding the matching landmark set keeps every bone on the
+  // same screen side as the video (and the facing/heading maths consistent) in both modes.
+  const lmap = mirrored ? LM : LM_SWAPPED;
+
   const isVisible = (idx: number, threshold = 0.32) => {
     const lm = landmarks[idx];
     return lm !== undefined && (lm.visibility === undefined || lm.visibility >= threshold);
@@ -131,18 +150,24 @@ export function solveLandmarksToAvatar(
   let yawInv = new THREE.Quaternion();
 
   // Camera deltas → avatar space: mirrored x, Y up, +Z towards the camera, equal units on every axis.
-  const toAvatar = (dx: number, dy: number, dz: number, removeHeading = true): THREE.Vector3 | null => {
-    const v = new THREE.Vector3((mirrored ? -dx : dx) * aspect, -dy, -dz * aspect * DEPTH_SCALE);
+  const toAvatar = (
+    dx: number,
+    dy: number,
+    dz: number,
+    removeHeading = true,
+    depthScale = DEPTH_SCALE
+  ): THREE.Vector3 | null => {
+    const v = new THREE.Vector3((mirrored ? -dx : dx) * aspect, -dy, -dz * aspect * depthScale);
     if (v.lengthSq() < 1e-8) return null;
     v.normalize();
     return removeHeading ? v.applyQuaternion(yawInv) : v;
   };
 
-  const getVec = (fromIdx: number, toIdx: number, removeHeading = true): THREE.Vector3 | null => {
+  const getVec = (fromIdx: number, toIdx: number, removeHeading = true, depthScale = DEPTH_SCALE): THREE.Vector3 | null => {
     if (!isVisible(fromIdx) || !isVisible(toIdx)) return null;
     const a = landmarks[fromIdx];
     const b = landmarks[toIdx];
-    return toAvatar(b.x - a.x, b.y - a.y, (b.z ?? 0) - (a.z ?? 0), removeHeading);
+    return toAvatar(b.x - a.x, b.y - a.y, (b.z ?? 0) - (a.z ?? 0), removeHeading, depthScale);
   };
 
   const mid = (a: number, b: number) => {
@@ -160,17 +185,17 @@ export function solveLandmarksToAvatar(
 
   // 0. Heading: hips line (reliable facing the camera) blended with nose / toe direction (reliable side-on)
   let headingRad = 0;
-  const vHipLine = isVisible(LM.LEFT_HIP) && isVisible(LM.RIGHT_HIP) ? getVec(LM.LEFT_HIP, LM.RIGHT_HIP, false) : null;
+  const vHipLine = isVisible(lmap.LEFT_HIP) && isVisible(lmap.RIGHT_HIP) ? getVec(lmap.LEFT_HIP, lmap.RIGHT_HIP, false) : null;
   const faceFwd = new THREE.Vector2();
   const addForward = (from: number, to: number, weight: number) => {
     const v = isVisible(from, 0.5) && isVisible(to, 0.5) ? getVec(from, to, false) : null;
     if (v) faceFwd.add(new THREE.Vector2(v.x, v.z).multiplyScalar(weight));
   };
-  addForward(LM.LEFT_HEEL, LM.LEFT_FOOT_INDEX, 1);
-  addForward(LM.RIGHT_HEEL, LM.RIGHT_FOOT_INDEX, 1);
-  if (isVisible(LM.NOSE, 0.5) && (isVisible(LM.LEFT_EAR, 0.5) || isVisible(LM.RIGHT_EAR, 0.5))) {
-    const ears = mid(LM.LEFT_EAR, LM.RIGHT_EAR);
-    const n = landmarks[LM.NOSE];
+  addForward(lmap.LEFT_HEEL, lmap.LEFT_FOOT_INDEX, 1);
+  addForward(lmap.RIGHT_HEEL, lmap.RIGHT_FOOT_INDEX, 1);
+  if (isVisible(lmap.NOSE, 0.5) && (isVisible(lmap.LEFT_EAR, 0.5) || isVisible(lmap.RIGHT_EAR, 0.5))) {
+    const ears = mid(lmap.LEFT_EAR, lmap.RIGHT_EAR);
+    const n = landmarks[lmap.NOSE];
     const v = toAvatar(n.x - ears.x, n.y - ears.y, (n.z ?? 0) - ears.z, false);
     if (v) faceFwd.add(new THREE.Vector2(v.x, v.z).multiplyScalar(1.5));
   }
@@ -192,9 +217,9 @@ export function solveLandmarksToAvatar(
   const boneQuats = new Map<string, THREE.Quaternion>();
 
   // 1. Pelvis: tilt bisects torso and thighs so push-ups / bridges tip the whole body, not just the spine
-  const vTorso = getMidVec(LM.LEFT_HIP, LM.RIGHT_HIP, LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER);
-  const kneesTracked = isTracked(LM.LEFT_KNEE) && isTracked(LM.RIGHT_KNEE);
-  const vThighs = kneesTracked ? getMidVec(LM.LEFT_HIP, LM.RIGHT_HIP, LM.LEFT_KNEE, LM.RIGHT_KNEE) : null;
+  const vTorso = getMidVec(lmap.LEFT_HIP, lmap.RIGHT_HIP, lmap.LEFT_SHOULDER, lmap.RIGHT_SHOULDER);
+  const kneesTracked = isTracked(lmap.LEFT_KNEE) && isTracked(lmap.RIGHT_KNEE);
+  const vThighs = kneesTracked ? getMidVec(lmap.LEFT_HIP, lmap.RIGHT_HIP, lmap.LEFT_KNEE, lmap.RIGHT_KNEE) : null;
 
   let qHips = new THREE.Quaternion();
   if (vTorso) {
@@ -241,21 +266,21 @@ export function solveLandmarksToAvatar(
 
   // 3. Neck & Head (Continuous 3D facial gaze tracking & downward angle preservation)
   const isVis = (idx: number) => isVisible(idx, 0.25);
-  const hasLeftEar = isVis(LM.LEFT_EAR);
-  const hasRightEar = isVis(LM.RIGHT_EAR);
+  const hasLeftEar = isVis(lmap.LEFT_EAR);
+  const hasRightEar = isVis(lmap.RIGHT_EAR);
   const hasAnyEar = hasLeftEar || hasRightEar;
-  const earL = hasLeftEar ? LM.LEFT_EAR : LM.RIGHT_EAR;
-  const earR = hasRightEar ? LM.RIGHT_EAR : LM.LEFT_EAR;
+  const earL = hasLeftEar ? lmap.LEFT_EAR : lmap.RIGHT_EAR;
+  const earR = hasRightEar ? lmap.RIGHT_EAR : lmap.LEFT_EAR;
 
   // Validate ears (must sit above shoulders in the camera frame)
-  const shY = (landmarks[LM.LEFT_SHOULDER].y + landmarks[LM.RIGHT_SHOULDER].y) * 0.5;
+  const shY = (landmarks[lmap.LEFT_SHOULDER].y + landmarks[lmap.RIGHT_SHOULDER].y) * 0.5;
   const earY = hasAnyEar ? ((landmarks[earL]?.y ?? 1) + (landmarks[earR]?.y ?? 1)) * 0.5 : 1.0;
   const earsValid = hasAnyEar && earY < shY;
 
   // Neck articulates from mid-shoulder to skull base / mid-ear (or nose)
   const vNeck = earsValid
-    ? getMidVec(LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER, earL, earR)
-    : getMidVec(LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER, LM.NOSE, LM.NOSE);
+    ? getMidVec(lmap.LEFT_SHOULDER, lmap.RIGHT_SHOULDER, earL, earR)
+    : getMidVec(lmap.LEFT_SHOULDER, lmap.RIGHT_SHOULDER, lmap.NOSE, lmap.NOSE);
 
   let qWorldNeck = qWorldSpine1.clone();
   if (vNeck) {
@@ -268,8 +293,8 @@ export function solveLandmarksToAvatar(
 
   // Forward gaze vector: points forward from back of skull / ears to nose / eye plane
   let vFaceForward: THREE.Vector3 | null = null;
-  if (earsValid && isVis(LM.NOSE)) {
-    vFaceForward = getMidVec(earL, earR, LM.NOSE, LM.NOSE);
+  if (earsValid && isVis(lmap.NOSE)) {
+    vFaceForward = getMidVec(earL, earR, lmap.NOSE, lmap.NOSE);
   }
   // Fallback gaze when ears are occluded: project forward from neck alignment
   if (!vFaceForward) {
@@ -283,12 +308,12 @@ export function solveLandmarksToAvatar(
 
   // Lateral eye/ear axis (Right vector): from left eye/ear to right eye/ear (+X direction)
   let vFaceRight: THREE.Vector3 | null = null;
-  if (isVis(LM.LEFT_EYE) && isVis(LM.RIGHT_EYE)) {
-    vFaceRight = getVec(LM.LEFT_EYE, LM.RIGHT_EYE);
+  if (isVis(lmap.LEFT_EYE) && isVis(lmap.RIGHT_EYE)) {
+    vFaceRight = getVec(lmap.LEFT_EYE, lmap.RIGHT_EYE);
   } else if (earsValid) {
     vFaceRight = getVec(earL, earR);
   } else {
-    vFaceRight = getVec(LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER);
+    vFaceRight = getVec(lmap.LEFT_SHOULDER, lmap.RIGHT_SHOULDER);
   }
 
   let vRightSafe = vFaceRight ? vFaceRight.clone() : new THREE.Vector3(1, 0, 0);
@@ -319,7 +344,8 @@ export function solveLandmarksToAvatar(
       THREE.MathUtils.degToRad(side === "Left" ? -ARM_REST_ABDUCTION_DEG : ARM_REST_ABDUCTION_DEG)
     );
 
-  const trackedVec = (from: number, to: number) => (isTracked(from) && isTracked(to) ? getVec(from, to) : null);
+  const trackedVec = (from: number, to: number, depthScale = DEPTH_SCALE) =>
+    isTracked(from) && isTracked(to) ? getVec(from, to, true, depthScale) : null;
 
   const solveArm = (side: "Left" | "Right", shoulder: number, elbow: number, wrist: number) => {
     const upperName = `${side}Arm`;
@@ -330,7 +356,7 @@ export function solveLandmarksToAvatar(
       : restArm(side);
     boneQuats.set(upperName, qUpper);
 
-    const vLower = vUpper ? trackedVec(elbow, wrist) : null;
+    const vLower = vUpper ? trackedVec(elbow, wrist, FOREARM_DEPTH_SCALE) : null;
     if (!vLower) {
       boneQuats.set(lowerName, new THREE.Quaternion());
       return;
@@ -372,10 +398,10 @@ export function solveLandmarksToAvatar(
     boneQuats.set(`${side}Foot`, clampQuat(`${side}Foot`, qFoot));
   };
 
-  solveArm("Left", LM.LEFT_SHOULDER, LM.LEFT_ELBOW, LM.LEFT_WRIST);
-  solveArm("Right", LM.RIGHT_SHOULDER, LM.RIGHT_ELBOW, LM.RIGHT_WRIST);
-  solveLeg("Left", LM.LEFT_HIP, LM.LEFT_KNEE, LM.LEFT_ANKLE, LM.LEFT_HEEL, LM.LEFT_FOOT_INDEX);
-  solveLeg("Right", LM.RIGHT_HIP, LM.RIGHT_KNEE, LM.RIGHT_ANKLE, LM.RIGHT_HEEL, LM.RIGHT_FOOT_INDEX);
+  solveArm("Left", lmap.LEFT_SHOULDER, lmap.LEFT_ELBOW, lmap.LEFT_WRIST);
+  solveArm("Right", lmap.RIGHT_SHOULDER, lmap.RIGHT_ELBOW, lmap.RIGHT_WRIST);
+  solveLeg("Left", lmap.LEFT_HIP, lmap.LEFT_KNEE, lmap.LEFT_ANKLE, lmap.LEFT_HEEL, lmap.LEFT_FOOT_INDEX);
+  solveLeg("Right", lmap.RIGHT_HIP, lmap.RIGHT_KNEE, lmap.RIGHT_ANKLE, lmap.RIGHT_HEEL, lmap.RIGHT_FOOT_INDEX);
 
   return { boneQuaternions: boneQuats, headingRad };
 }

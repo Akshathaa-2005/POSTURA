@@ -4,7 +4,7 @@ import { buildRigSkeleton, groundAvatar, createGroundingState } from "./avatarRi
 import { createGlbRetargeter, findGlbBones, fitScaleToRig, missingRigBones, normalizeBoneName } from "./glbRetarget";
 
 /** A Mixamo-like T-pose skeleton (arms along ±X) under a rotated, scaled armature. */
-function buildTPoseGlb(prefix = "mixamorig") {
+function buildTPoseGlb(prefix = "mixamorig", leftSide = -1) {
   const model = new THREE.Group();
   const armature = new THREE.Group();
   armature.rotation.x = -Math.PI / 2; // FBX-style import rotation
@@ -28,7 +28,7 @@ function buildTPoseGlb(prefix = "mixamorig") {
   add("Spine2", bones.get("Spine1")!, 0, 0, 15);
   add("Neck", bones.get("Spine2")!, 0, 0, 20);
   add("Head", bones.get("Neck")!, 0, 0, 12);
-  for (const [side, sx] of [["Left", -1], ["Right", 1]] as const) {
+  for (const [side, sx] of [["Left", leftSide], ["Right", -leftSide]] as const) {
     add(`${side}UpLeg`, bones.get("Hips")!, sx * 10, 0, -5);
     add(`${side}Leg`, bones.get(`${side}UpLeg`)!, 0, 0, -42);
     add(`${side}Foot`, bones.get(`${side}Leg`)!, 0, 0, -42);
@@ -40,13 +40,13 @@ function buildTPoseGlb(prefix = "mixamorig") {
   return { model, bones };
 }
 
-function setup() {
+function setup(leftSide = -1) {
   const space = new THREE.Group();
   const proxy = buildRigSkeleton();
   space.add(proxy.get("Hips")!);
   groundAvatar(proxy, space, createGroundingState());
 
-  const { model, bones } = buildTPoseGlb();
+  const { model, bones } = buildTPoseGlb("mixamorig", leftSide);
   space.add(model);
   const glbBones = findGlbBones(model);
   const retarget = createGlbRetargeter(proxy, glbBones, space);
@@ -112,6 +112,25 @@ describe("glbRetarget", () => {
     expect(dir(bones.get("RightForeArm")!, bones.get("RightHand")!).distanceTo(wantFore)).toBeLessThan(1e-4);
     // Pelvis follows the logical rig's translation
     expect(worldPos(bones.get("Hips")!).distanceTo(worldPos(proxy.get("Hips")!))).toBeLessThan(1e-5);
+  });
+
+  it("pairs bones by body side when the glb's left is on the other side from the logical rig's", () => {
+    // glTF characters face +Z with their anatomical left on +x; the logical rig keeps "Left" on screen-left (-x).
+    const { space, proxy, bones, retarget } = setup(+1);
+    expect(retarget.mapped.length).toBe(15);
+    retarget.update();
+    // Lift the logical rig's screen-left arm straight out sideways, forearm up.
+    proxy.get("LeftArm")!.quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2);
+    proxy.get("LeftForeArm")!.quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2);
+    space.updateMatrixWorld(true);
+    retarget.update();
+
+    const outward = dir(bones.get("RightArm")!, bones.get("RightForeArm")!); // the glb arm that is on screen-left
+    expect(outward.x).toBeLessThan(-0.99);
+    expect(Math.abs(outward.y)).toBeLessThan(0.05);
+    // the glb arm on the other side stays hanging by the body instead of swinging across the chest
+    expect(dir(bones.get("LeftArm")!, bones.get("LeftForeArm")!).y).toBeCloseTo(-1, 3);
+    expect(worldPos(bones.get("RightForeArm")!).x).toBeLessThan(worldPos(bones.get("Spine1")!).x - 0.2);
   });
 
   it("fits the model scale so the glb's hips height matches the rig's", () => {

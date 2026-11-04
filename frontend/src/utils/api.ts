@@ -19,3 +19,16 @@ export function getUserId(): string {
     return "anonymous";
   }
 }
+
+export interface SessionSummary {
+  session_id: string;
+  text: string;
+  source: "llm" | "template";
+}
+
+/** The LLM's debrief of a finished session, grounded in its reps, score and coached faults. */
+export async function fetchSessionSummary(sessionId: string): Promise<SessionSummary> {
+  const res = await fetch(backendUrl(`/api/sessions/${sessionId}/summary`));
+  if (!res.ok) throw new Error(`Summary unavailable (${res.status})`);
+  return res.json();
+}
