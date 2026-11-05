@@ -115,6 +115,7 @@ export default function AvatarCoach3D({
   // Auto-switch to live mimicry whenever camera becomes active
   useEffect(() => {
     if (cameraOn) {
+      demoLoopRef.current = false;
       setControlMode("mimic");
     }
   }, [cameraOn]);
@@ -149,6 +150,10 @@ export default function AvatarCoach3D({
   const [replayPhaseLabel, setReplayPhaseLabel] = useState<string | null>(null);
   // Pending replay keyframe timeouts for idempotent cancellation
   const replayTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // The coach demo repeats until the user switches back to live mimicry.
+  const demoLoopRef = useRef(false);
+  const demoCmdRef = useRef<AvatarCommand | null>(null);
+  const applyCommandRef = useRef<(cmd: AvatarCommand | null) => void>(() => {});
 
   const setCameraPreset = useCallback((preset: "perspective" | "side" | "front") => {
     setViewAngle(preset);
@@ -244,6 +249,8 @@ export default function AvatarCoach3D({
     replayTimeoutsRef.current = [];
     tweensRef.current = [];
 
+    demoCmdRef.current = cmd;
+
     // ── 2. Build the exercise demo (focused on the fault when there is one) ──
     const seq = buildExerciseReplaySequence(cmd, exerciseId);
 
@@ -277,6 +284,10 @@ export default function AvatarCoach3D({
 
     // ── 6. Clear cue overlay after the full sequence ends ───────────────────
     const clearId = setTimeout(() => {
+      if (demoLoopRef.current) {
+        applyCommandRef.current(demoCmdRef.current);
+        return;
+      }
       setCoachCue(null);
       setReplayPhaseLabel(null);
     }, cumulativeDelay + 1200);
@@ -284,6 +295,16 @@ export default function AvatarCoach3D({
   }, [exerciseId, scheduleKeyframe]);
 
 
+
+  useEffect(() => {
+    applyCommandRef.current = applyCommand;
+  }, [applyCommand]);
+
+  // Stop any running demo loop when the component unmounts.
+  useEffect(() => () => {
+    demoLoopRef.current = false;
+    replayTimeoutsRef.current.forEach(clearTimeout);
+  }, []);
 
   // Show the rig dots and lines only in "rig" mode
   useEffect(() => {
@@ -999,12 +1020,24 @@ export default function AvatarCoach3D({
     if (!command) return;
 
     if (autoPlay && controlMode === "coach") {
+      demoLoopRef.current = true;
       applyCommand(command);
     }
   }, [command, autoPlay, controlMode, applyCommand]);
 
+  const stopDemo = () => {
+    demoLoopRef.current = false;
+    replayTimeoutsRef.current.forEach(clearTimeout);
+    replayTimeoutsRef.current = [];
+    tweensRef.current = [];
+    setCoachCue(null);
+    setReplayPhaseLabel(null);
+    setControlMode("mimic");
+  };
+
   const startDemo = () => {
     setControlMode("coach");
+    demoLoopRef.current = true;
     applyCommand(command ?? null);
   };
 
@@ -1053,28 +1086,27 @@ export default function AvatarCoach3D({
           </div>
         )}
 
-        {/* Coach verbal cue + phase label overlay: shown during replay demos */}
-        {coachCue && (
-          <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20">
-            {replayPhaseLabel && (
-              <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-forest/15 bg-forest/10 px-2.5 py-0.5 text-[11px] font-medium text-forest">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-forest" />
-                {replayPhaseLabel}
-              </div>
-            )}
-            <div className="rounded-xl border border-slate/[0.07] bg-linen/95 px-3 py-2 font-display text-sm italic leading-snug text-slate shadow-soft backdrop-blur-sm">
-              {coachCue}
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Coach verbal cue + phase label: shown under the avatar during demos so it never covers the figure */}
+      {coachCue && (
+        <div className="shrink-0 border-t border-slate/[0.07] bg-linen px-4 py-2.5">
+          {replayPhaseLabel && (
+            <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-forest/15 bg-forest/10 px-2.5 py-0.5 text-[11px] font-medium text-forest">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-forest" />
+              {replayPhaseLabel}
+            </div>
+          )}
+          <p className="font-display text-sm italic leading-snug text-slate">{coachCue}</p>
+        </div>
+      )}
 
       {/* Control bar */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-slate/[0.07] bg-linen px-4 py-2.5 text-xs text-stone">
         {/* Tracking mode: live mimicry vs. coach demo */}
         <div className="flex items-center gap-1" role="group" aria-label="Avatar mode">
           <button
-            onClick={() => setControlMode("mimic")}
+            onClick={stopDemo}
             aria-pressed={controlMode === "mimic"}
             className={`${segment(controlMode === "mimic")} inline-flex items-center gap-1.5`}
             title="Real-time motion mirror"
